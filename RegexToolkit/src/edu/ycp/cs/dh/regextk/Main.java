@@ -45,6 +45,7 @@ public class Main {
 		runnerMap.put("grade", new Runner() { public void exec(String[] args) throws Exception { GradeRegexps.main(args);} });
 		runnerMap.put("debug", new Runner() { public void exec(String[] args) throws Exception { DebugMain.main(args);} });
 		runnerMap.put("gradefa", new Runner() { public void exec(String[] args) throws Exception { GradeFiniteAutomaton.main(args); } });
+		runnerMap.put("lexgen", new Runner() {  public void exec(String[] args) throws Exception { LexGen.main(args); } });
 	}
 	
 	public static void main(String[] args) throws Exception {
@@ -74,5 +75,6 @@ public class Main {
 		System.out.println("  grade      - grade regexps");
 		System.out.println("  debug      - run debug main");
 		System.out.println("  gradefa    - grade JFLAP finite automaton");
+		System.out.println("  lexgen     - generate C lexical analyzer");
 	}
 }

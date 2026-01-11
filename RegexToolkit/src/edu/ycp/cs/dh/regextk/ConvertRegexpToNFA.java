@@ -22,6 +22,8 @@
 
 package edu.ycp.cs.dh.regextk;
 
+import java.text.CharacterIterator;
+
 /**
  * Parse a regular expression and convert it to a nondeterministic finite automaton (NFA).
  */
@@ -48,9 +50,20 @@ public class ConvertRegexpToNFA {
 	T := F+         repetition (1 or more)
 	T := F?         optional (0 or 1)
 	F := s          literal characters
+	F := \s         escape sequence
 	F := ε          epsilon
 	F := (R)        grouping
 
+	Supported escape sequences are:
+
+	\d - digit (0-9)
+	\a - alphabetic (A-Z, a-z)
+	\x - hex digit (A-F, a-f, 0-9)
+	\s - whitespace (' ', \t, \r, \n)
+	
+	Any escaped character other than the above allows matching
+	of a literal character, even if it would otherwise be considered
+	a metacharacter. E.g., \+ matches a literal "+" character.
 	 */
 
 	private static final boolean CHECK_NFA = true;
@@ -58,6 +71,11 @@ public class ConvertRegexpToNFA {
 	private int pos;
 	private int nextCh;
 
+	private static final String DIGITS = "0123456789";
+	private static final String ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+	private static final String HEX_DIGITS = DIGITS + "ABCDEFabcdef";
+	private static final String WHITESPACE = " \t\n\r";
+	
 	/**
 	 * Constructor.
 	 * 
@@ -241,9 +259,39 @@ public class ConvertRegexpToNFA {
 			State accepting = result.createState();
 			accepting.setAccepting(true);
 
-			result.createTransition(start, accepting, c == 'ε' ? FiniteAutomaton.EPSILON : (char)c);
+			if (c == '\\') {
+				// Handle escape sequence
+				
+				int nextC = next();
+				
+				switch (nextC) {
+				case 'd':
+					addTransitions(result, start, accepting, DIGITS);
+					break;
+				case 'a':
+					addTransitions(result, start, accepting, ALPHA);
+					break;
+				case 'x':
+					addTransitions(result, start, accepting, HEX_DIGITS);
+					break;
+				case 's':
+					addTransitions(result, start, accepting, WHITESPACE);
+					break;
+				default:
+					result.createTransition(start, accepting, (char) nextC);
+				}
+			} else {
+				// match literal character or epsilon
+				result.createTransition(start, accepting, c == 'ε' ? FiniteAutomaton.EPSILON : (char)c);
+			}
 
 			return check(result);
+		}
+	}
+
+	private void addTransitions(FiniteAutomaton result, State start, State accepting, String symbols) {
+		for (int i = 0; i < symbols.length(); ++i) {
+			result.createTransition(start, accepting, symbols.charAt(i));
 		}
 	}
 
