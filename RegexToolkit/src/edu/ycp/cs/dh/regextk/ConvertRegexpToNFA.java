@@ -1,5 +1,5 @@
 // RegexToolkit - A Java library for regular expressions and finite automata
-// Copyright (C) 2013,2017 David H. Hovemeyer <david.hovemeyer@gmail.com>
+// Copyright (C) 2013,2017,2026 David H. Hovemeyer <david.hovemeyer@gmail.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the

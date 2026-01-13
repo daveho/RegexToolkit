@@ -1,8 +1,29 @@
+// RegexToolkit - A Java library for regular expressions and finite automata
+// Copyright (C) 2013,2017,2026 David H. Hovemeyer <david.hovemeyer@gmail.com>
+//
+// Permission is hereby granted, free of charge, to any person obtaining
+// a copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to
+// permit persons to whom the Software is furnished to do so, subject to
+// the following conditions:
+// 
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+// 
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+// IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+// CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+// TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+// SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 package edu.ycp.cs.dh.regextk;
 
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -112,42 +133,10 @@ public class GenerateLexicalAnalyzer {
 			// even though MOST transitions on alphabetic characters do go to one specific
 			// target state. In this case, we can still make use of isalpha(), as long as the
 			// "special" alphabetic characters are handled first.
-			int nonExclusiveOnAlphaTargetState = -1;
-			if (allCovered(charToTarget, ConvertRegexpToNFA.ALPHA)) {
-				// For each target state reached by an alphabetic character,
-				// count how many transitions target it.
-				Map<Integer, Integer> hist = new HashMap<Integer, Integer>();
-				for (int i = 0; i < ConvertRegexpToNFA.ALPHA.length(); ++i) {
-					int ch = ConvertRegexpToNFA.ALPHA.charAt(i);
-					int targetState = charToTarget.get(ch);
-					if (!hist.containsKey(targetState))
-						hist.put(targetState, 1);
-					else
-						hist.put(targetState, hist.get(targetState) + 1);
-				}
-
-				// Determine which state was transitioned to the most often (and thus
-				// is a candidate for being selected by isalpha after transitions on the other states
-				// have been eliminated)
-				int mostFrequentAlphaTargetState = -1;
-				int highestAlphaTransitionCount = 0;
-				for (Iterator<Map.Entry<Integer, Integer>> i = hist.entrySet().iterator(); i.hasNext(); ) {
-					Map.Entry<Integer, Integer> entry = i.next();
-					if (mostFrequentAlphaTargetState == -1 || entry.getValue() > highestAlphaTransitionCount) {
-						mostFrequentAlphaTargetState = entry.getKey();
-						highestAlphaTransitionCount = entry.getValue();
-					}
-				}
-				
-				// Make a note of which state will use the isalpha() check, and remove
-				// its transitions from charToTarget.
-				nonExclusiveOnAlphaTargetState = mostFrequentAlphaTargetState;
-				for (Iterator<Map.Entry<Integer, Integer>> i = charToTarget.entrySet().iterator(); i.hasNext(); ) {
-					Map.Entry<Integer, Integer> entry = i.next();
-					if (entry.getValue() == mostFrequentAlphaTargetState)
-						i.remove();
-				}
-			}
+			int nonExclusiveOnAlphaTargetState = checkNonExclusveCharacterPred(charToTarget, ConvertRegexpToNFA.ALPHA);
+			
+			// Similar case for nonexclusive use of isdigit()
+			int nonExclusiveOnDigitTargetState = checkNonExclusveCharacterPred(charToTarget, ConvertRegexpToNFA.DIGITS);
 			
 			boolean firstCondition = true;
 			for (Iterator<Map.Entry<Integer, Integer>> i = charToTarget.entrySet().iterator(); i.hasNext(); ) {
@@ -190,15 +179,10 @@ public class GenerateLexicalAnalyzer {
 					writer.printf("        next_state = %d;\n", targetState);
 				}
 			}
-			if (nonExclusiveOnAlphaTargetState != -1) {
-				writer.write("      ");
-				if (!firstCondition)
-					writer.write("else ");
-				else
-					firstCondition = false;
-				writer.write("if (isalpha(c))\n");
-				writer.printf("        next_state = %d;\n", nonExclusiveOnAlphaTargetState);
-			}
+			if (nonExclusiveOnAlphaTargetState != -1)
+				firstCondition = emitNonExclusivePredicateCheck(writer, nonExclusiveOnAlphaTargetState, firstCondition, "isalpha");
+			if (nonExclusiveOnDigitTargetState != -1)
+				firstCondition = emitNonExclusivePredicateCheck(writer, nonExclusiveOnDigitTargetState, firstCondition, "isdigit");
 			writer.write("      break;\n");
 		}
 		writer.write("    }\n");
@@ -271,5 +255,57 @@ public class GenerateLexicalAnalyzer {
 				return false;
 		}
 		return true;
+	}
+
+	private int checkNonExclusveCharacterPred(Map<Integer, Integer> charToTarget, String charClass) {
+		int nonExclusiveTargetState = -1;
+		if (allCovered(charToTarget, charClass)) {
+			// For each target state reached by an alphabetic character,
+			// count how many transitions target it.
+			Map<Integer, Integer> hist = new HashMap<Integer, Integer>();
+			for (int i = 0; i < charClass.length(); ++i) {
+				int ch = charClass.charAt(i);
+				int targetState = charToTarget.get(ch);
+				if (!hist.containsKey(targetState))
+					hist.put(targetState, 1);
+				else
+					hist.put(targetState, hist.get(targetState) + 1);
+			}
+
+			// Determine which state was transitioned to the most often (and thus
+			// is a candidate for being selected by the character class predicate
+			// (e.g., isalpha()) after transitions on the other states
+			// have been eliminated)
+			int mostFrequentTargetState = -1;
+			int highestTransitionCount = 0;
+			for (Iterator<Map.Entry<Integer, Integer>> i = hist.entrySet().iterator(); i.hasNext(); ) {
+				Map.Entry<Integer, Integer> entry = i.next();
+				if (mostFrequentTargetState == -1 || entry.getValue() > highestTransitionCount) {
+					mostFrequentTargetState = entry.getKey();
+					highestTransitionCount = entry.getValue();
+				}
+			}
+			
+			// Make a note of which state will use the character class predicate, and remove
+			// its transitions from charToTarget.
+			nonExclusiveTargetState = mostFrequentTargetState;
+			for (Iterator<Map.Entry<Integer, Integer>> i = charToTarget.entrySet().iterator(); i.hasNext(); ) {
+				Map.Entry<Integer, Integer> entry = i.next();
+				if (entry.getValue() == mostFrequentTargetState)
+					i.remove();
+			}
+		}
+		return nonExclusiveTargetState;
+	}
+
+	private boolean emitNonExclusivePredicateCheck(PrintWriter writer, int targetState, boolean firstCondition, String predName) {
+		writer.write("      ");
+		if (!firstCondition)
+			writer.write("else ");
+		else
+			firstCondition = false;
+		writer.printf("if (%s(c))\n", predName);
+		writer.printf("        next_state = %d;\n", targetState);
+		return firstCondition;
 	}
 }
