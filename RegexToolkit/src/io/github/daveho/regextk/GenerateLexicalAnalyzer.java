@@ -55,7 +55,7 @@ public class GenerateLexicalAnalyzer {
 			"      UNGET(lexer, c);\n" +
 			"      break;\n" +
 			"    }\n" +
-			"    ADD_TO_LEXEME(lexer, c);\n" +
+			"    ADD_TO_LEXEME(c);\n" +
 			"  }\n";
 	
 	private CreateLexicalAnalyzerFA createLexerFA;
@@ -98,8 +98,6 @@ public class GenerateLexicalAnalyzer {
 		writer.printf(PREAMBLE, dfa.getStartState().getNumber());
 		
 		for (int state = 0; state < table.length; ++state) {
-			writer.printf("    case %d:\n", state);
-
 			int[] row = table[state];
 			Map<Integer, Integer> charToTarget = analyzeRow(row, executeDFA.getMinCC());
 			
@@ -113,6 +111,9 @@ public class GenerateLexicalAnalyzer {
 					throw new IllegalStateException("This shouldn't happen");
 				continue;
 			}
+
+			// There is at least one outgoing transition in this state
+			writer.printf("    case %d:\n", state);
 
 			// Build an array, indexed by target states, with strings
 			// containing the characters on which there is a transition to
