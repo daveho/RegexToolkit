@@ -1,0 +1,6 @@
+int
+INT
+char
+CHAR
+(\d+)|(0(x|X)\x+)
+INT_LITERAL
