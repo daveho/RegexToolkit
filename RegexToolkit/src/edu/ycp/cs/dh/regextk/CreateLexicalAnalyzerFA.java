@@ -84,10 +84,11 @@ public class CreateLexicalAnalyzerFA {
 	 * 
 	 * @param tokenType the token type identifier
 	 * @param regex regular expression matching all lexemes for this token
+	 * @param lineNumber line number of the token type in the specfile
 	 */
-	public void addTokenType(String tokenType, String regex) {
+	public void addTokenType(String tokenType, String regex, int lineNumber) {
 		if (tokenType.contains(regex))
-			throw new IllegalArgumentException("Duplicate token type: " + tokenType);
+			throw new IllegalArgumentException("At line " + lineNumber + " :Duplicate token type: " + tokenType);
 		tokenTypes.add(tokenType);
 		
 		// Build the NFA for this token type, and add it to the global NFA

@@ -42,9 +42,7 @@ import java.util.Set;
  */
 public class GenerateLexicalAnalyzer {
 	private static final String PREAMBLE =
-			"  int state = %d, next_state;\n" +
-			"  int token_type;\n" +
-			"  int c;\n" +
+			"  int state = %d, next_state, token_type, c;\n" +
 			"  for (;;) {\n" +
 			"    c = GET(lexer);\n" +
 			"    if (c == EOF)\n" +
@@ -105,8 +103,16 @@ public class GenerateLexicalAnalyzer {
 			int[] row = table[state];
 			Map<Integer, Integer> charToTarget = analyzeRow(row, executeDFA.getMinCC());
 			
-			if (charToTarget.isEmpty())
-				throw new IllegalStateException("State " + state + " has no outgoing transitions");
+			if (charToTarget.isEmpty()) {
+				// If there are no outgoing transitions, the state
+				// should be an accepting state. (The NFA, and the DFA constructed
+				// from the NFA, should not have any states that aren't on a
+				// path towards an accepting state.)
+				State dfaState = dfa.getStates().get(state);
+				if (dfaState.getNumber() != state)
+					throw new IllegalStateException("This shouldn't happen");
+				continue;
+			}
 
 			// Build an array, indexed by target states, with strings
 			// containing the characters on which there is a transition to
