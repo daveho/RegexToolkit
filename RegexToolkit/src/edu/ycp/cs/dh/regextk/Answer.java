@@ -30,5 +30,5 @@ public enum Answer {
 	ACCEPT,
 	
 	/** String is rejected by the Automaton. */
-	REJECT;
+	REJECT,
 }
