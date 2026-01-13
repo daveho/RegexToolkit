@@ -31,21 +31,21 @@
     <target name="jar" depends="build">
         <jar destfile="regexToolkit.jar" basedir="bin" includes="**">
             <manifest>
-                <attribute name="Main-Class" value="edu.ycp.cs.dh.regextk.Main"/>
+                <attribute name="Main-Class" value="io.github.daveho.regextk.Main"/>
             </manifest>
         </jar>
     </target>
     <target name="checkerJar" depends="build">
         <jar destfile="regexChecker.jar" basedir="bin" includes="**">
             <manifest>
-                <attribute name="Main-Class" value="edu.ycp.cs.dh.regextk.TestRegexps"/>
+                <attribute name="Main-Class" value="io.github.daveho.regextk.TestRegexps"/>
             </manifest>
         </jar>
     </target>
     <target name="equivalenceCheckerJar" depends="build">
         <jar destfile="regexEquivalenceChecker.jar" basedir="bin" includes="**">
             <manifest>
-                <attribute name="Main-Class" value="edu.ycp.cs.dh.regextk.DetermineEquivalenceOfRegexps"/>
+                <attribute name="Main-Class" value="io.github.daveho.regextk.DetermineEquivalenceOfRegexps"/>
             </manifest>
         </jar>
     </target>
