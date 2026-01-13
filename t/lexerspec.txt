@@ -1,6 +1,6 @@
-int
 INT
-char
+int
 CHAR
-(\d+)|(0(x|X)\x+)
+char
 INT_LITERAL
+((\d+)|(0(x|X)\x+))(u|U|l|L)*
