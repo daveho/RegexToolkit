@@ -56,6 +56,7 @@ public class GenerateLexicalAnalyzer {
 			"      break;\n" +
 			"    }\n" +
 			"    ADD_TO_LEXEME(c);\n" +
+			"    state = next_state;\n" +
 			"  }\n";
 	
 	private CreateLexicalAnalyzerFA createLexerFA;
