@@ -220,7 +220,7 @@ public class GenerateLexicalAnalyzer {
 			dfaStateToRecognizedTokenType[dfaAcceptingState.getNumber()] = recognizedTokenType;
 		}
 		
-		writer.write("  int token_type = -1;\n");
+		writer.write("  token_type = -1;\n");
 		writer.write("  switch (state) {\n");
 		
 		for (int state = 0; state < table.length; ++state) {
