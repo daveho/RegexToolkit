@@ -1,5 +1,5 @@
 // RegexToolkit - A Java library for regular expressions and finite automata
-// Copyright (C) 2013, David H. Hovemeyer <david.hovemeyer@gmail.com>
+// Copyright (C) 2013,2026 David H. Hovemeyer <david.hovemeyer@gmail.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the
@@ -112,5 +112,19 @@ public class ConvertNFAToDFA extends SingleInputFiniteAutomatonTransformer imple
 			nfaToDfaStateMap.put(nfaStates, dfaState);
 		}
 		return dfaState;
+	}
+	
+	/**
+	 * Get the NFA {@link StateSet} corresponding to the given DFA state.
+	 * 
+	 * @param dfaState a DFA state
+	 * @return the NFA {@link StateSet} corresponding to the DFA state
+	 */
+	public StateSet getNFAStateSetForDFAState(State dfaState) {
+		for (Map.Entry<StateSet, State> e : nfaToDfaStateMap.entrySet()) {
+			if (e.getValue() == dfaState)
+				return e.getKey();
+		}
+		throw new IllegalArgumentException("DFA state not found");
 	}
 }

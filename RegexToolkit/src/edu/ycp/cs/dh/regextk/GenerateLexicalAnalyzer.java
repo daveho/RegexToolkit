@@ -26,8 +26,11 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Generate a C lexical analyzer.
@@ -39,7 +42,7 @@ import java.util.Map;
  */
 public class GenerateLexicalAnalyzer {
 	private static final String PREAMBLE =
-			"  int state = 0, next_state;\n" +
+			"  int state = %d, next_state;\n" +
 			"  int token_type;\n" +
 			"  int c;\n" +
 			"  for (;;) {\n" +
@@ -50,8 +53,10 @@ public class GenerateLexicalAnalyzer {
 			"    switch (state) {\n";
 	
 	private static final String END_LOOP_BODY =
-			"    if (next_state == -1)\n" +
+			"    if (next_state == -1) {\n" +
+			"      UNGET(lexer, c);\n" +
 			"      break;\n" +
+			"    }\n" +
 			"    ADD_TO_LEXEME(lexer, c);\n" +
 			"  }\n";
 	
@@ -90,9 +95,9 @@ public class GenerateLexicalAnalyzer {
 		executeDFA.setAutomaton(dfa);
 		
 		int[][] table = executeDFA.getTable();
-		writer.printf("// Lexical analyzer has %d states\n", table.length);
+		writer.printf("  // Lexical analyzer has %d states\n", table.length);
 		
-		writer.write(PREAMBLE);
+		writer.printf(PREAMBLE, dfa.getStartState().getNumber());
 		
 		for (int state = 0; state < table.length; ++state) {
 			writer.printf("    case %d:\n", state);
@@ -139,8 +144,7 @@ public class GenerateLexicalAnalyzer {
 			int nonExclusiveOnDigitTargetState = checkNonExclusveCharacterPred(charToTarget, ConvertRegexpToNFA.DIGITS);
 			
 			boolean firstCondition = true;
-			for (Iterator<Map.Entry<Integer, Integer>> i = charToTarget.entrySet().iterator(); i.hasNext(); ) {
-				Map.Entry<Integer, Integer> entry = i.next();
+			for (Map.Entry<Integer, Integer> entry : charToTarget.entrySet()) {
 				transitionChars[entry.getValue()] += (char) entry.getKey().intValue();
 			}
 			
@@ -187,6 +191,41 @@ public class GenerateLexicalAnalyzer {
 		}
 		writer.write("    }\n");
 		writer.write(END_LOOP_BODY);
+		
+		// Get token types
+		List<String> tokenTypes = createLexerFA.getTokenTypes();
+		
+		// Get the ConvertNFAToDFA object used to convert the lexer NFA
+		// to a DFA: we need this in order to know which NFA accepting states
+		// each DFA accepting state corresponds to
+		ConvertNFAToDFA converter = createLexerFA.getConverter();
+		
+		// Analyze accepting states of the DFA, and determine which token type
+		// is recognized for each one
+		List<State> acceptingStates = dfa.getAcceptingStates();
+		
+		// For DFA accepting states, what token type is recognized
+		String[] dfaStateToRecognizedTokenType = new String[table.length];
+		
+		// Determine which token type is recognized in each DFA accepting state
+		for (State dfaAcceptingState : acceptingStates) {
+			String recognizedTokenType = determineTokenTypeForDFAAcceptingState(tokenTypes, converter, dfaAcceptingState);
+			dfaStateToRecognizedTokenType[dfaAcceptingState.getNumber()] = recognizedTokenType;
+		}
+		
+		writer.write("  int token_type = -1;\n");
+		writer.write("  switch (state) {\n");
+		
+		for (int state = 0; state < table.length; ++state) {
+			String recognizedTokenType = dfaStateToRecognizedTokenType[state];
+			if (recognizedTokenType != null) {
+				writer.printf("  case %d:\n", state);
+				writer.printf("    token_type = %s;\n", recognizedTokenType); 
+				writer.write("    break;\n");
+			}
+		}
+		
+		writer.write("  }\n");
 	}
 
 	/**
@@ -278,8 +317,7 @@ public class GenerateLexicalAnalyzer {
 			// have been eliminated)
 			int mostFrequentTargetState = -1;
 			int highestTransitionCount = 0;
-			for (Iterator<Map.Entry<Integer, Integer>> i = hist.entrySet().iterator(); i.hasNext(); ) {
-				Map.Entry<Integer, Integer> entry = i.next();
+			for (Map.Entry<Integer, Integer> entry : hist.entrySet()) {
 				if (mostFrequentTargetState == -1 || entry.getValue() > highestTransitionCount) {
 					mostFrequentTargetState = entry.getKey();
 					highestTransitionCount = entry.getValue();
@@ -307,5 +345,42 @@ public class GenerateLexicalAnalyzer {
 		writer.printf("if (%s(c))\n", predName);
 		writer.printf("        next_state = %d;\n", targetState);
 		return firstCondition;
+	}
+
+	private String determineTokenTypeForDFAAcceptingState(List<String> tokenTypes, ConvertNFAToDFA converter,
+			State dfaAcceptingState) {
+		// This should only be called with a DFA accepting state
+		if (!dfaAcceptingState.isAccepting())
+			throw new IllegalArgumentException();
+		
+		// Find NFA states corresponding to this DFA state
+		StateSet nfaAcceptingStateSet = converter.getNFAStateSetForDFAState(dfaAcceptingState);
+		
+		// For all of the NFA accepting states in the NFA state set,
+		// determine which token type is recognized
+		Set<String> recognizedTokenTypes = new HashSet<String>();
+		for (State nfaState : nfaAcceptingStateSet.getStates()) {
+			if (nfaState.isAccepting())
+				recognizedTokenTypes.add(createLexerFA.getTokenTypeForAcceptingState(nfaState));
+		}
+		
+		// At least one of the NFA states should be an accepting state,
+		// meaning that we should find at least one token type
+		if (recognizedTokenTypes.isEmpty())
+			throw new IllegalStateException("No tokens are recognized in DFA state " + dfaAcceptingState.getNumber());
+		
+		// Determine the highest-priority token type recognized in this DFA accepting state
+		String recognizedTokenType = null;
+		for (String tokenType : tokenTypes) {
+			if (recognizedTokenTypes.contains(tokenType)) {
+				recognizedTokenType = tokenType;
+				break;
+			}
+		}
+		if (recognizedTokenType == null) {
+			throw new IllegalStateException();
+		}
+		
+		return recognizedTokenType;
 	}
 }

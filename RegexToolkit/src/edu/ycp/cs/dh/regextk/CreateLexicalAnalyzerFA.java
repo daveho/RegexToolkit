@@ -23,6 +23,7 @@
 package edu.ycp.cs.dh.regextk;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -103,10 +104,6 @@ public class CreateLexicalAnalyzerFA {
 		// Get the unique accepting state
 		State tokenAcceptingState = tokenNFA.getUniqueAcceptingState();
 		
-		// Associate the token type with its accepting state
-		tokenTypeToAcceptingState.put(tokenType, tokenAcceptingState);
-		acceptingStateToTokenType.put(tokenAcceptingState, tokenType);
-		
 		// Add all token NFA states/transitions to the global NFA
 		nfa.addAll(tokenNFA);
 		
@@ -115,6 +112,11 @@ public class CreateLexicalAnalyzerFA {
 		
 		// Unflag token start state
 		tokenStartState.setStart(false);
+		
+		// Associate the token type with its accepting state
+		//System.out.printf("NFA state %d: token type=%s\n", tokenAcceptingState.getNumber(), tokenType);
+		tokenTypeToAcceptingState.put(tokenType, tokenAcceptingState);
+		acceptingStateToTokenType.put(tokenAcceptingState, tokenType);
 		
 		// Create epsilon transition from global start state to token NFA start state
 		nfa.createTransition(globalStartState, tokenStartState, FiniteAutomaton.EPSILON);
@@ -131,5 +133,41 @@ public class CreateLexicalAnalyzerFA {
 			dfa = converter.execute(FiniteAutomatonTransformerMode.NONDESTRUCTIVE);
 		}
 		return dfa;
+	}
+	
+	/**
+	 * Get token types in decreasing order of priority.
+	 * 
+	 * @return token types
+	 */
+	public List<String> getTokenTypes() {
+		return Collections.unmodifiableList(tokenTypes);
+	}
+	
+	/**
+	 * Get the {@link ConvertNFAToDFA} object used to convert the lexical
+	 * analyzer NFA to a DFA. This is important, since the NFA accepting states
+	 * are associated 1:1 with the token types, and by knowing which NFA
+	 * accepting states a DFA accepting state is associated with, we know
+	 * what kind of token is recognized by that DFA state.
+	 *  
+	 * @return the {@link ConvertNFAToDFA} object
+	 */
+	public ConvertNFAToDFA getConverter() {
+		return converter;
+	}
+	
+	/**
+	 * Get the token type for given NFA accepting {@link State}.
+	 * 
+	 * @param nfaAcceptingState the NFA accepting state
+	 * @return the token type recognized by the NFA accepting state
+	 */
+	public String getTokenTypeForAcceptingState(State nfaAcceptingState) {
+		if (!nfaAcceptingState.isAccepting())
+			throw new IllegalArgumentException("NFA state isn't an accepting state");
+		if (!acceptingStateToTokenType.containsKey(nfaAcceptingState))
+			throw new IllegalStateException("Can't find token type for NFA state " + nfaAcceptingState.getNumber());
+		return acceptingStateToTokenType.get(nfaAcceptingState);
 	}
 }
