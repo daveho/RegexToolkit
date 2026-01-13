@@ -2,6 +2,10 @@ package edu.ycp.cs.dh.regextk;
 
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
 
 /**
  * Generate a C lexical analyzer.
@@ -12,7 +16,33 @@ import java.io.PrintWriter;
  * on heavyweight tools.
  */
 public class GenerateLexicalAnalyzer {
+	private static final String PREAMBLE =
+			"  int state = 0, next_state;\n" +
+			"  int token_type;\n" +
+			"  int c;\n" +
+			"  for (;;) {\n" +
+			"    c = GET(lexer);\n" +
+			"    if (c == EOF)\n" +
+			"      break;\n" +
+			"    next_state = -1;\n" +
+			"    switch (state) {\n";
+	
+	private static final String END_LOOP_BODY =
+			"    if (next_state == -1)\n" +
+			"      break;\n" +
+			"    ADD_TO_LEXEME(lexer, c);\n" +
+			"  }\n";
+	
 	private CreateLexicalAnalyzerFA createLexerFA;
+	
+	// Special character codes used as shorthands for digits,
+	// alphabetic, hex digit, and whitespace. This allows the generated
+	// lexer to make use of isxdigit(), isalpha(), isdigit(),
+	// and isspace().
+	private static final char DIGIT = '\u00f0';
+	private static final char ALPHA = '\u00f1';
+	private static final char XDIGIT = '\u00f2';
+	private static final char SPACE = '\u00f3';
 	
 	/**
 	 * Constructor.
@@ -38,7 +68,147 @@ public class GenerateLexicalAnalyzer {
 		executeDFA.setAutomaton(dfa);
 		
 		int[][] table = executeDFA.getTable();
-		
 		writer.printf("// Lexical analyzer has %d states\n", table.length);
+		
+		writer.write(PREAMBLE);
+		
+		for (int state = 0; state < table.length; ++state) {
+			writer.printf("    case %d:\n", state);
+
+			int[] row = table[state];
+			Map<Integer, Integer> charToTarget = analyzeRow(row, executeDFA.getMinCC());
+			
+			if (charToTarget.isEmpty())
+				throw new IllegalStateException("State " + state + " has no outgoing transitions");
+
+			// Build an array, indexed by target states, with strings
+			// containing the characters on which there is a transition to
+			// the target state. We use use the character codes
+			String[] transitionChars = new String[table.length];
+			Arrays.fill(transitionChars, "");
+
+			// See if we can leverage isxdigit, isalpha, isdigit, and/or isspace
+			
+			int onHexDigit = checkCharacterPred(charToTarget, ConvertRegexpToNFA.HEX_DIGITS);
+			if (onHexDigit != -1)
+				transitionChars[onHexDigit] += XDIGIT;
+
+			int onDigit = checkCharacterPred(charToTarget, ConvertRegexpToNFA.DIGITS);
+			if (onDigit != -1)
+				transitionChars[onDigit] += DIGIT;
+
+			int onAlpha = checkCharacterPred(charToTarget, ConvertRegexpToNFA.ALPHA);
+			if (onAlpha != -1)
+				transitionChars[onAlpha] += ALPHA;
+
+			int onSpace = checkCharacterPred(charToTarget, ConvertRegexpToNFA.WHITESPACE);
+			if (onSpace != -1)
+				transitionChars[onSpace] += SPACE;
+			
+			boolean firstCondition = true;
+			for (Iterator<Map.Entry<Integer, Integer>> i = charToTarget.entrySet().iterator(); i.hasNext(); ) {
+				Map.Entry<Integer, Integer> entry = i.next();
+				transitionChars[entry.getValue()] += (char) entry.getKey().intValue();
+			}
+			
+			for (int targetState = 0; targetState < table.length; ++targetState) {
+				String labels = transitionChars[targetState];
+				if (!labels.isEmpty()) {
+					writer.write("      ");
+					if (!firstCondition)
+						writer.write("else ");
+					else
+						firstCondition = false;
+					writer.write("if (");
+					for (int j = 0; j < labels.length(); ++j) {
+						if (j > 0)
+							writer.write(" ||\n               ");
+						int ch = labels.charAt(j);
+						switch (ch) {
+						case DIGIT:
+							writer.write("isdigit(c)");
+							break;
+						case ALPHA:
+							writer.write("isalpha(c)");
+							break;
+						case XDIGIT:
+							writer.write("isxdigit(c)");
+							break;
+						case SPACE:
+							writer.write("isspace(c)");
+							break;
+						default:
+							writer.printf("c == '%c'", ch);
+							break;
+						}
+					}
+					writer.write(")\n");
+					writer.printf("        next_state = %d;\n", targetState);
+				}
+			}
+			writer.write("      break;\n");
+		}
+		writer.write("    }\n");
+		writer.write(END_LOOP_BODY);
+	}
+
+	/**
+	 * Analyze a row of the transition table by returning a map of
+	 * character codes to target states. Character codes having no
+	 * transition are omitted from the map.
+	 * 
+	 * @param row a transition table rows
+	 * @param minCC the character code of the first column of the row
+	 * @return map of character codes to target states
+	 */
+	private Map<Integer, Integer> analyzeRow(int[] row, int minCC) {
+		Map<Integer, Integer> result = new HashMap<Integer, Integer>();
+		for (int i = 0; i < row.length; ++i) {
+			if (row[i] >= 0) {
+				int ch = i + minCC;
+				if (ch > 127)
+					throw new IllegalStateException("Transition on non-ASCII character code " + ch);
+				result.put(ch, row[i]);
+			}
+		}
+		return result;
+	}
+
+	/**
+	 * Check whether all characters in a character class have transitions
+	 * to the same target state. If so, return the state number of that state,
+	 * and also remove the entries for those characters from the char to target
+	 * map.
+	 * 
+	 * @param charToTarget map of characters to target states
+	 * @param charClass characters in a character class
+	 * @return target state for all characters in class, or -1
+	 *         it isn't the case that all of the characters have transitions
+	 *         to the same target state
+	 */
+	private int checkCharacterPred(Map<Integer, Integer> charToTarget, String charClass) {
+		int targetState = -1;
+		for (int i = 0; i < charClass.length(); ++i) {
+			int ch = (int) charClass.charAt(i);
+			Integer t = charToTarget.get(ch);
+			if (t == null)
+				// No transition on this character
+				return -1;
+			if (targetState == -1)
+				targetState = t;
+			else if (targetState != t)
+				// Not all characters in the character class transition to the
+				// same target state
+				return -1;
+		}
+		
+		// If we got here, then all characters in the character class
+		// transition to the same target state. Remove their entries from
+		// the char to target map
+		for (int i = 0; i < charClass.length(); ++i) {
+			charToTarget.remove((int) charClass.charAt(i));
+		}
+		
+		return targetState;
 	}
 }

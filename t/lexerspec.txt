@@ -4,3 +4,5 @@ CHAR
 char
 INT_LITERAL
 ((\d+)|(0(x|X)\x+))(u|U|l|L)*
+IDENT
+(_|\a)(_|\a|\d)*

@@ -71,10 +71,25 @@ public class ConvertRegexpToNFA {
 	private int pos;
 	private int nextCh;
 
-	private static final String DIGITS = "0123456789";
-	private static final String ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-	private static final String HEX_DIGITS = DIGITS + "ABCDEFabcdef";
-	private static final String WHITESPACE = " \t\n\r";
+	/**
+	 * Digit characters.
+	 */
+	public static final String DIGITS = "0123456789";
+	
+	/**
+	 * Alphabetic characters.
+	 */
+	public static final String ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+	
+	/**
+	 * Hex digit characters.
+	 */
+	public static final String HEX_DIGITS = DIGITS + "ABCDEFabcdef";
+	
+	/**
+	 * Whitespace characters.
+	 */
+	public static final String WHITESPACE = " \t\n\r\f";
 	
 	/**
 	 * Constructor.
