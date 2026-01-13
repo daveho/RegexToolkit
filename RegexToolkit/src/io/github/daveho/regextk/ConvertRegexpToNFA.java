@@ -23,6 +23,8 @@
 package io.github.daveho.regextk;
 
 import java.text.CharacterIterator;
+import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * Parse a regular expression and convert it to a nondeterministic finite automaton (NFA).
@@ -41,18 +43,23 @@ public class ConvertRegexpToNFA {
 	Productions:
 
 	R := E
-	R := E|R        disjunction
+	R := E|R             disjunction
 	E := T
-	E := TE         concatenation
+	E := TE              concatenation
 	E := T
 	T := F
-	T := F*         repetition (0 or more)
-	T := F+         repetition (1 or more)
-	T := F?         optional (0 or 1)
-	F := s          literal characters
-	F := \s         escape sequence
-	F := ε          epsilon
-	F := (R)        grouping
+	T := F*              repetition (0 or more)
+	T := F+              repetition (1 or more)
+	T := F?              optional (0 or 1)
+	F := s               literal characters
+	F := \s              escape sequence
+	F := ε               epsilon
+	F := (R)             grouping
+	F := [<char class>]  character class, <char class> is usual character class syntax, e.g.
+	                       [a-z]
+	                       [A-Za-z0-9]
+	                       [^"]
+	                     note that a negated character class will only match printable characters
 
 	Supported escape sequences are:
 
@@ -60,6 +67,7 @@ public class ConvertRegexpToNFA {
 	\a - alphabetic (A-Z, a-z)
 	\x - hex digit (A-F, a-f, 0-9)
 	\s - whitespace (' ', \t, \r, \n)
+	\p - printable character (character codes 32-126)
 	
 	Any escaped character other than the above allows matching
 	of a literal character, even if it would otherwise be considered
@@ -90,6 +98,30 @@ public class ConvertRegexpToNFA {
 	 * Whitespace characters.
 	 */
 	public static final String WHITESPACE = " \t\n\r\f";
+	
+	private static final int PRINTABLE_START = 32;
+	private static final int PRINTABLE_END = 127;
+	
+	private static class CharacterClassSpec {
+		Set<Integer> members = new TreeSet<Integer>();
+
+		public void add(int ch) {
+			members.add(ch);
+		}
+
+		public void negate() {
+			TreeSet<Integer> dup = new TreeSet<Integer>(members);
+			members.clear();
+			for (int ch = PRINTABLE_START; ch < PRINTABLE_END; ++ch)
+				if (!dup.contains(ch))
+					members.add(ch);
+		}
+
+		public void addAll(String s) {
+			for (int i = 0; i < s.length(); ++i)
+				members.add((int) s.charAt(i));
+		}
+	}
 	
 	/**
 	 * Constructor.
@@ -266,6 +298,23 @@ public class ConvertRegexpToNFA {
 			FiniteAutomaton r = parseR();
 			expect(')');
 			return r;
+		} else if (c == '[') {
+			// character class
+			// scan the character class spec
+			CharacterClassSpec spec = scanCharacterClassSpec();
+
+			// Create the FA
+			FiniteAutomaton result = new FiniteAutomaton();
+			State start = result.createState();
+			start.setStart(true);
+			State accepting = result.createState();
+			accepting.setAccepting(true);
+
+			// Add transitions on all characters in the character class
+			for (Integer ch : spec.members)
+				result.createTransition(start, accepting, (char) ch.intValue());
+			
+			return result;
 		} else {
 			// literal character or ε
 			FiniteAutomaton result = new FiniteAutomaton();
@@ -292,6 +341,11 @@ public class ConvertRegexpToNFA {
 				case 's':
 					addTransitions(result, start, accepting, WHITESPACE);
 					break;
+				case 'p':
+					// printable characters
+					for (int ch = PRINTABLE_START; ch < PRINTABLE_END; ++ch)
+						result.createTransition(start, accepting, (char) ch);
+					break;
 				default:
 					result.createTransition(start, accepting, (char) nextC);
 				}
@@ -302,6 +356,72 @@ public class ConvertRegexpToNFA {
 
 			return check(result);
 		}
+	}
+	
+	private CharacterClassSpec scanCharacterClassSpec() {
+		CharacterClassSpec spec = new CharacterClassSpec();
+		
+		boolean first = true, negated = false;
+		
+		for (;;) {
+			int ch = peek();
+			if (ch < 0 || ch == ']')
+				break;
+			ch = next();
+			boolean was_first = first;
+			first = false;
+			
+			if (was_first && ch == '^') {
+				negated = true;
+				continue;
+			}
+			
+			if (ch == '\\') {
+				// escape sequence
+				ch = next();
+				
+				switch (ch) {
+				case 'd':
+					spec.addAll(DIGITS);
+					break;
+				case 'a':
+					spec.addAll(ALPHA);
+					break;
+				case 'x':
+					spec.addAll(HEX_DIGITS);
+					break;
+				case 's':
+					spec.addAll(WHITESPACE);
+					break;
+				case 'p':
+					for (int i = PRINTABLE_START; i < PRINTABLE_END; ++i)
+						spec.add(i);
+					break;
+				default:
+					spec.add(ch);
+				}
+				
+				continue;
+			}
+			
+			if (peek() == '-') {
+				// character range
+				next();
+				int endCh = next();
+				for (int c = ch; c <= endCh; ++c)
+					spec.add(c);
+				continue;
+			}
+			
+			// Just a plain old regular character
+			spec.add(ch);
+		}
+		
+		// negated character class?
+		if (negated)
+			spec.negate();
+		
+		return spec;
 	}
 
 	private void addTransitions(FiniteAutomaton result, State start, State accepting, String symbols) {
