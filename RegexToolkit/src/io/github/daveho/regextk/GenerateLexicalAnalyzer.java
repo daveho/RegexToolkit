@@ -183,7 +183,7 @@ public class GenerateLexicalAnalyzer {
 							writer.write("isspace(c)");
 							break;
 						default:
-							writer.printf("c == '%c'", ch);
+							writer.printf("c == '%s'", charLiteralEscape(ch));
 							break;
 						}
 					}
@@ -234,6 +234,25 @@ public class GenerateLexicalAnalyzer {
 		}
 		
 		writer.write("  }\n");
+	}
+
+	private String charLiteralEscape(int ch) {
+		switch (ch) {
+		case '\\':
+			return "\\\\";
+		case '\t':
+			return "\\t";
+		case '\n':
+			return "\\n";
+		case '\r':
+			return "\\r";
+		case '\f':
+			return "\\f";
+		case '\'':
+			return "\\'";
+		default:
+			return new String(new char[]{(char)ch});
+		}
 	}
 
 	/**
