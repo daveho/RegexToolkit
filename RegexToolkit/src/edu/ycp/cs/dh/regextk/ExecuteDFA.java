@@ -27,13 +27,15 @@ import java.util.Set;
 /**
  * Implementation of ExecuteFiniteAutomaton that works only with deterministic
  * finite automata, but should be very fast because it uses a table-driven
- * approach.
+ * approach. Note that this class can also be used for just building a
+ * transition table.
  */
 public class ExecuteDFA implements ExecuteFiniteAutomaton {
 	private int minCC;
 	private int[][] table;
 	private int startState;
 	private boolean[] acceptingStates;
+	private int rangeSize;
 	
 	@Override
 	public void setAutomaton(FiniteAutomaton fa) {
@@ -45,7 +47,6 @@ public class ExecuteDFA implements ExecuteFiniteAutomaton {
 		// is reachable by following a transition on possible input symbols
 		
 		// find minimum and maximum character code used
-		int rangeSize;
 		Set<Character> alphabet = FiniteAutomatonUtil.getAlphabet(fa);
 		if (alphabet.isEmpty()) {
 			// Special case: the automaton only accepts the empty string
@@ -63,7 +64,7 @@ public class ExecuteDFA implements ExecuteFiniteAutomaton {
 				}
 
 			}
-			rangeSize = (maxCC+1) - minCC;
+			this.rangeSize = (maxCC+1) - minCC;
 		}
 		
 		// create the table and initialize it so that there are no valid transitions
@@ -89,6 +90,39 @@ public class ExecuteDFA implements ExecuteFiniteAutomaton {
 				acceptingStates[s.getNumber()] = true;
 			}
 		}
+	}
+	
+	/**
+	 * Get the minimum character code used in the FA.
+	 * 
+	 * @return minimum character code
+	 */
+	public int getMinCC() {
+		return minCC;
+	}
+	
+	/**
+	 * Get the size of the range of character codes,
+	 * i.e., (maxCC - minCC) + 1. This is the number of elements
+	 * in each row of the transition table.
+	 * 
+	 * @return the range size
+	 */
+	public int getRangeSize() {
+		return rangeSize;
+	}
+	
+	/**
+	 * Get the transition table.
+	 * The rows (first dimension) are indexed by DFA state number.
+	 * The columns (second dimension) are indexed by offset of the
+	 * character code from the minimum character code (accessed by
+	 * calling {@link #getMinCC()}).
+	 * 
+	 * @return the transition table
+	 */
+	public int[][] getTable() {
+		return table;
 	}
 	
 	@Override

@@ -33,6 +33,20 @@ public class CreateLexicalAnalyzerFA {
 	 */
 	private State globalStartState;
 	
+	/**
+	 * Converter to convert the NFA to a DFA.
+	 * We need to keep this around since it has the mappings
+	 * of NFA state sets to DFA states, which we need in order
+	 * to determine which token type is recognized by each DFA
+	 * accepting state.
+	 */
+	private ConvertNFAToDFA converter;
+	
+	/**
+	 * Generated DFA.
+	 */
+	private FiniteAutomaton dfa;
+	
 	public CreateLexicalAnalyzerFA() {
 		tokenTypes = new ArrayList<String>();
 		tokenTypeToAcceptingState = new HashMap<String, State>();
@@ -82,5 +96,18 @@ public class CreateLexicalAnalyzerFA {
 		
 		// Create epsilon transition from global start state to token NFA start state
 		nfa.createTransition(globalStartState, tokenStartState, FiniteAutomaton.EPSILON);
+	}
+	
+	/**
+	 * Create DFA for recognizing tokens.
+	 * @return the DFA recognizing the tokens of the input language
+	 */
+	public FiniteAutomaton createDFA() {
+		if (dfa == null) {
+			converter = new ConvertNFAToDFA();
+			converter.add(nfa);
+			dfa = converter.execute(FiniteAutomatonTransformerMode.NONDESTRUCTIVE);
+		}
+		return dfa;
 	}
 }

@@ -1,7 +1,8 @@
 package edu.ycp.cs.dh.regextk;
 
 import java.io.FileReader;
-import java.io.Reader;
+import java.io.FileWriter;
+import java.io.PrintWriter;
 import java.util.Scanner;
 
 /**
@@ -10,13 +11,13 @@ import java.util.Scanner;
  */
 public class LexGen {
 	public static void main(String[] args) throws Exception {
-		if (args.length != 3) {
-			System.err.println("Usage: ava -jar regexToolkit.jar lexgen <specfile> <output C sourcefile>");
+		if (args.length != 2) {
+			System.err.println("Usage: java -jar regexToolkit.jar lexgen <specfile> <output C sourcefile>");
 			System.exit(1);;
 		}
 		
-		String specfile = args[1];
-		String outputSourceFile = args[2];
+		String specfile = args[0];
+		String outputSourceFile = args[1];
 		
 		CreateLexicalAnalyzerFA createLexerFA = new CreateLexicalAnalyzerFA();
 		
@@ -30,6 +31,12 @@ public class LexGen {
 				
 				createLexerFA.addTokenType(tokenType, regex);
 			}
+		}
+		
+		// Generate the lexer code
+		GenerateLexicalAnalyzer generateLexer = new GenerateLexicalAnalyzer(createLexerFA);
+		try (PrintWriter writer = new PrintWriter(new FileWriter(outputSourceFile))) {
+			generateLexer.generateLexicalAnalyzer(writer);
 		}
 		
 		System.out.println("Everybody is good!");
