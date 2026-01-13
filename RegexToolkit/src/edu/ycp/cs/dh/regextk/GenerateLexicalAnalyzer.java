@@ -2,6 +2,7 @@ package edu.ycp.cs.dh.regextk;
 
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -105,6 +106,49 @@ public class GenerateLexicalAnalyzer {
 			if (onSpace != -1)
 				transitionChars[onSpace] += SPACE;
 			
+			// Special case: for states where the DFA hasn't decided definitively between
+			// a keyword and an identifier, it's possible that there are transitions on
+			// all alphabetic characters, but they don't all go to the same target state,
+			// even though MOST transitions on alphabetic characters do go to one specific
+			// target state. In this case, we can still make use of isalpha(), as long as the
+			// "special" alphabetic characters are handled first.
+			int nonExclusiveOnAlphaTargetState = -1;
+			if (allCovered(charToTarget, ConvertRegexpToNFA.ALPHA)) {
+				// For each target state reached by an alphabetic character,
+				// count how many transitions target it.
+				Map<Integer, Integer> hist = new HashMap<Integer, Integer>();
+				for (int i = 0; i < ConvertRegexpToNFA.ALPHA.length(); ++i) {
+					int ch = ConvertRegexpToNFA.ALPHA.charAt(i);
+					int targetState = charToTarget.get(ch);
+					if (!hist.containsKey(targetState))
+						hist.put(targetState, 1);
+					else
+						hist.put(targetState, hist.get(targetState) + 1);
+				}
+
+				// Determine which state was transitioned to the most often (and thus
+				// is a candidate for being selected by isalpha after transitions on the other states
+				// have been eliminated)
+				int mostFrequentAlphaTargetState = -1;
+				int highestAlphaTransitionCount = 0;
+				for (Iterator<Map.Entry<Integer, Integer>> i = hist.entrySet().iterator(); i.hasNext(); ) {
+					Map.Entry<Integer, Integer> entry = i.next();
+					if (mostFrequentAlphaTargetState == -1 || entry.getValue() > highestAlphaTransitionCount) {
+						mostFrequentAlphaTargetState = entry.getKey();
+						highestAlphaTransitionCount = entry.getValue();
+					}
+				}
+				
+				// Make a note of which state will use the isalpha() check, and remove
+				// its transitions from charToTarget.
+				nonExclusiveOnAlphaTargetState = mostFrequentAlphaTargetState;
+				for (Iterator<Map.Entry<Integer, Integer>> i = charToTarget.entrySet().iterator(); i.hasNext(); ) {
+					Map.Entry<Integer, Integer> entry = i.next();
+					if (entry.getValue() == mostFrequentAlphaTargetState)
+						i.remove();
+				}
+			}
+			
 			boolean firstCondition = true;
 			for (Iterator<Map.Entry<Integer, Integer>> i = charToTarget.entrySet().iterator(); i.hasNext(); ) {
 				Map.Entry<Integer, Integer> entry = i.next();
@@ -145,6 +189,15 @@ public class GenerateLexicalAnalyzer {
 					writer.write(")\n");
 					writer.printf("        next_state = %d;\n", targetState);
 				}
+			}
+			if (nonExclusiveOnAlphaTargetState != -1) {
+				writer.write("      ");
+				if (!firstCondition)
+					writer.write("else ");
+				else
+					firstCondition = false;
+				writer.write("if (isalpha(c))\n");
+				writer.printf("        next_state = %d;\n", nonExclusiveOnAlphaTargetState);
 			}
 			writer.write("      break;\n");
 		}
@@ -210,5 +263,13 @@ public class GenerateLexicalAnalyzer {
 		}
 		
 		return targetState;
+	}
+
+	private boolean allCovered(Map<Integer, Integer> charToTarget, String charClass) {
+		for (int i = 0; i < charClass.length(); ++i) {
+			if (!charToTarget.containsKey((int) charClass.charAt(i)))
+				return false;
+		}
+		return true;
 	}
 }
