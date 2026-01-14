@@ -24,6 +24,7 @@ package io.github.daveho.regextk;
 
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -41,13 +42,33 @@ import java.util.Set;
  * on heavyweight tools.
  */
 public class GenerateLexicalAnalyzer {
+	private static final String YYLEX_STRINGIFY =
+			"static int yylex_bsearch(const char *s, int c) {\n" + 
+			"  size_t len = strlen(s);\n" + 
+			"  size_t low = 0, high = len, mid;\n" + 
+			"\n" + 
+			"  while (high > low) {\n" + 
+			"    mid = (low + high) / 2;\n" + 
+			"    int diff = (c - s[mid]);\n" + 
+			"    if (diff == 0)\n" + 
+			"      break;\n" + 
+			"    if (diff < 0)\n" + 
+			"      high = mid;\n" + 
+			"    else\n" + 
+			"      low = mid+1;\n" + 
+			"  }\n" + 
+			"\n" + 
+			"  return s[low] == c;\n" + 
+			"}\n";
+	
 	private static final String PREAMBLE =
-			"  int state = %d, next_state, token_type, c;\n" +
-			"  for (;;) {\n" +
-			"    c = GET(lexer);\n" +
-			"    if (c == EOF)\n" +
-			"      break;\n" +
-			"    next_state = -1;\n" +
+			"static int yylex(LEXER_TYPE lexer, LEXEME_BUF_TYPE lexeme_buf) {\n" + 
+			"  int state = %d, next_state, token_type, c;\n" + 
+			"  for (;;) {\n" + 
+			"    c = GET(lexer);\n" + 
+			"    if (c == EOF)\n" + 
+			"      break;\n" + 
+			"    next_state = -1;\n" + 
 			"    switch (state) {\n";
 	
 	private static final String END_LOOP_BODY =
@@ -55,9 +76,19 @@ public class GenerateLexicalAnalyzer {
 			"      UNGET(lexer, c);\n" +
 			"      break;\n" +
 			"    }\n" +
-			"    ADD_TO_LEXEME(c);\n" +
+			"    ADD_TO_LEXEME(lexeme_buf, c);\n" +
 			"    state = next_state;\n" +
 			"  }\n";
+	
+	private static final String END_FUNCTION =
+			"  return token_type;\n" + 
+			"}\n";
+	
+	// Threshold for allowed number of single-character transitions to the
+	// same target state that can't be checked by a predicate function before
+	// we emit a binary string search to detect all of them (as, basically,
+	// a bespoke predicate function)
+	private static final int BSEARCH_THRESHOLD = 4;
 	
 	private CreateLexicalAnalyzerFA createLexerFA;
 	
@@ -74,7 +105,7 @@ public class GenerateLexicalAnalyzer {
 	 * Constructor.
 	 * 
 	 * @param createLexerFA the {@link CreateLexicalAnalyzerFA} object
-	 *                      which created the lexer DFA
+	 *                      which creates the lexer DFA
 	 */
 	public GenerateLexicalAnalyzer(CreateLexicalAnalyzerFA createLexerFA) {
 		this.createLexerFA = createLexerFA;
@@ -88,14 +119,29 @@ public class GenerateLexicalAnalyzer {
 	 * @param writer the writer to write the generated code to
 	 * @throws IOException
 	 */
-	public void generateLexicalAnalyzer(PrintWriter writer) throws IOException {
+	public void generateLexicalAnalyzer(PrintWriter out) throws IOException {
+		
+		// StringWriter used to accumulate the generated code,
+		// *without* the generated string constants for bsearch checks.
+		StringWriter generatedCodeWriter = new StringWriter(); 
+		PrintWriter writer = new PrintWriter(generatedCodeWriter);
+		
+		// Get the lexical analyzer DFA
 		FiniteAutomaton dfa = createLexerFA.createDFA();
+
+		// Create transition table 
 		ExecuteDFA executeDFA = new ExecuteDFA();
 		executeDFA.setAutomaton(dfa);
-		
 		int[][] table = executeDFA.getTable();
-		writer.printf("  // Lexical analyzer has %d states\n", table.length);
 		
+		// For each state, a string of characters to be checked using
+		// yylex_bsearch()
+		String[] bsearch_chars = new String[table.length];
+		
+		writer.write(YYLEX_STRINGIFY);
+		writer.write("\n");
+		
+		writer.printf("// Lexical analyzer has %d states\n", table.length);
 		writer.printf(PREAMBLE, dfa.getStartState().getNumber());
 		
 		for (int state = 0; state < table.length; ++state) {
@@ -234,6 +280,14 @@ public class GenerateLexicalAnalyzer {
 		}
 		
 		writer.write("  }\n");
+
+		writer.write(END_FUNCTION);
+		
+		writer.flush();
+		
+		// TODO: write string constants needed for calls to yylex_bsearch()
+		
+		out.write(generatedCodeWriter.toString());
 	}
 
 	private String charLiteralEscape(int ch) {
