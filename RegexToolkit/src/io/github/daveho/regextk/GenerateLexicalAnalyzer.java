@@ -27,6 +27,7 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.BitSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -43,24 +44,22 @@ import java.util.Set;
  * on heavyweight tools.
  */
 public class GenerateLexicalAnalyzer {
-	private static final String YYLEX_BSEARCH =
-			"static int yylex_bsearch(const char *s, int len, int c) {\n" + 
-			"  int low = 0, high = len, mid;\n" + 
+	private static final String YYLEX_IS_MEMBER =
+			"struct yylex_charclass {\n" + 
+			"  uint32_t bits[4];\n" + 
+			"};\n" + 
 			"\n" + 
-			"  while (high > low) {\n" + 
-			"    mid = (low + high) / 2;\n" + 
-			"    int diff = (c - s[mid]);\n" + 
-			"    if (diff == 0)\n" + 
-			"      return 1;\n" + 
-			"    if (diff < 0)\n" + 
-			"      high = mid;\n" + 
-			"    else\n" + 
-			"      low = mid + 1;\n" + 
-			"  }\n" + 
-			"\n" + 
-			"  return 0;\n" + 
+			"int yylex_is_member(const struct yylex_charclass *cc, int c) {\n" + 
+			"  int bit_offset, word_index;\n" + 
+			"  bit_offset = (c & 0x1F);\n" + 
+			"  c >>= 5;\n" + 
+			"  word_index = (c & 0x03);\n" + 
+			"  c >>= 2;\n" + 
+			"  if (c != 0)\n" + 
+			"    return 0;\n" + 
+			"  return (cc->bits[word_index] & (1U << bit_offset)) != 0U;\n" + 
 			"}\n";
-	
+
 	private static final String PREAMBLE =
 			"static int yylex(LEXER_TYPE lexer, LEXEME_BUF_TYPE lexeme_buf) {\n" + 
 			"  int state = %d, next_state, token_type, c;\n" + 
@@ -86,9 +85,9 @@ public class GenerateLexicalAnalyzer {
 	
 	// Threshold for allowed number of single-character transitions to the
 	// same target state that can't be checked by a predicate function before
-	// we emit a binary string search to detect all of them (as, basically,
-	// a bespoke predicate function)
-	private static final int BSEARCH_THRESHOLD = 4;
+	// we emit a set membership test as a bespoke character predicate
+	// implementation
+	private static final int BITSET_THRESHOLD = 4;
 	
 	private CreateLexicalAnalyzerFA createLexerFA;
 	
@@ -134,12 +133,8 @@ public class GenerateLexicalAnalyzer {
 		executeDFA.setAutomaton(dfa);
 		int[][] table = executeDFA.getTable();
 		
-		// Generated string constants to serve as custom charaacter
-		// class predicates
-		List<String> bsearchStringConstants = new ArrayList<String>();
-		
-		writer.write(YYLEX_BSEARCH);
-		writer.write("\n");
+		// BitSets implementing bespoke character predicates
+		List<BitSet> predBitsets = new ArrayList<BitSet>();
 		
 		writer.printf("// Lexical analyzer has %d states\n", table.length);
 		writer.printf(PREAMBLE, dfa.getStartState().getNumber());
@@ -208,25 +203,21 @@ public class GenerateLexicalAnalyzer {
 				String labels = transitionChars[targetState];
 
 				// See how many transitions we have that aren't handled by
-				// a call to a predicate function
+				// a call to a predicate function. If there are enough,
+				// generate a bitset to serve as a bespoke predicate.
 				int nonPredicateTransitions = countNonPredicateTransitions(labels);
-				String bsearchString = "";
-				if (nonPredicateTransitions > BSEARCH_THRESHOLD) {
+				String bespokePredSetMembers = "";
+				if (nonPredicateTransitions > BITSET_THRESHOLD) {
 					int predicateTransitions = labels.length() - nonPredicateTransitions;
 					// Predicate transitions are always at the beginning of the labels string
-					bsearchString = labels.substring(predicateTransitions);
+					bespokePredSetMembers = labels.substring(predicateTransitions);
 					
-					// Characters in the bsearch string must be sorted
-					char[] bsearchChars = bsearchString.toCharArray();
-					Arrays.sort(bsearchChars);
-					bsearchString = new String(bsearchChars);
-					
-					// Remove the characters now being handled by bsearch
+					// Remove the characters now being handled by yylex_is_member
 					// from the labels string
 					labels = labels.substring(0, predicateTransitions);
 				}
 
-				if (!labels.isEmpty() || !bsearchString.isEmpty()) {
+				if (!labels.isEmpty() || !bespokePredSetMembers.isEmpty()) {
 					writer.write("      ");
 					boolean wasFirstCondition = firstCondition;
 					if (!firstCondition)
@@ -235,19 +226,19 @@ public class GenerateLexicalAnalyzer {
 						firstCondition = false;
 					writer.write("if (");
 					
-					boolean emittedBsearch = false;
-					if (!bsearchString.isEmpty()) {
-						String strConstantName = findOrCreateStringConstant(bsearchStringConstants, bsearchString);
-						writer.write("yylex_bsearch(");
-						writer.write(strConstantName);
-						writer.write(", ");
-						writer.write(String.valueOf(bsearchString.length()));
+					boolean emittedSetMembershipTest = false;
+					if (!bespokePredSetMembers.isEmpty()) {
+						String bitsetInstanceName = findOrCreateBitSet(predBitsets, bespokePredSetMembers);
+						
+						writer.write("yylex_is_member(&");
+						writer.write(bitsetInstanceName);
 						writer.write(", c)");
-						emittedBsearch = true;
+						
+						emittedSetMembershipTest = true;
 					}
 					
 					for (int j = 0; j < labels.length(); ++j) {
-						if (emittedBsearch || j > 0)
+						if (emittedSetMembershipTest || j > 0)
 							writer.printf(" ||\n          %s", wasFirstCondition ? "" : "     ");
 						int ch = labels.charAt(j);
 						switch (ch) {
@@ -319,49 +310,78 @@ public class GenerateLexicalAnalyzer {
 		writer.write(END_FUNCTION);
 		
 		writer.flush();
-		
-		// Write string constants used by yylex_bsearch
-		if (!bsearchStringConstants.isEmpty()) {
-			for (int i = 0; i < bsearchStringConstants.size(); ++i) {
-				String bsearchString = bsearchStringConstants.get(i);
-				out.write("static const char *yylex_cclass_");
-				out.write(String.valueOf(i));
-				out.write(" =\n  \"");
-				for (int j = 0; j < bsearchString.length(); ++j) {
-					int ch = bsearchString.charAt(j);
-					if (needsEscaped(ch)) {
-						out.write("\\");
-					}
-					out.write((char) ch);
-				}
-				out.write("\";\n");
+		String generatedCode = generatedCodeWriter.toString();
+
+		// If necessary, write out the definitions of the
+		// yylex_charclass struct type and yylex_is_member() function,
+		// and the bitset instances for each bespoke predicate
+		if (!predBitsets.isEmpty()) {
+			out.write(YYLEX_IS_MEMBER);
+			out.write("\n");
+			
+			for (int i = 0; i < predBitsets.size(); ++i) {
+				BitSet predBitset = predBitsets.get(i);
+				String bitsetName = "yylex_cclass_" + i;
+				out.write("static const struct yylex_charclass ");
+				out.write(bitsetName);
+				out.write(" = {\n");
+				out.write("  { ");
+				int[] bitsetWords = getBitsetWords(predBitset);
+				for (int j = 0; j < bitsetWords.length; ++j)
+					out.printf("0x%x, ", bitsetWords[j]);
+				out.write("}\n");
+				out.write("};\n");
 			}
+			
 			out.write("\n");
 		}
 		
 		// Write generated code
-		out.write(generatedCodeWriter.toString());
+		out.write(generatedCode);
 	}
 
-	// Check whether a character needs to be escaped in a C string literal
-	private static boolean needsEscaped(int ch) {
-		return ch == '"' || ch == '\\';
-	}
-
-	private String findOrCreateStringConstant(List<String> bsearchStringConstants, String bsearchString) {
+	private String findOrCreateBitSet(List<BitSet> predBitsets, String setMembers) {
+		// Construct a BitSet representing the character codes of
+		// the set members
+		BitSet bs = new BitSet();
+		for (int i = 0; i < setMembers.length(); ++i) {
+			int ch = setMembers.charAt(i);
+			if (ch < 0 || ch > 127)
+				throw new IllegalStateException("non-ASCII character code");
+			bs.set(ch);
+		}
+		
 		int index;
 		
 		// See if this string already exists in the list
-		for (index = 0; index < bsearchStringConstants.size(); ++index) {
-			if (bsearchStringConstants.get(index).equals(bsearchString))
+		for (index = 0; index < predBitsets.size(); ++index) {
+			if (predBitsets.get(index).equals(bs))
 				break;
 		}
 		
 		// If string hasn't been added yet, add it
-		if (index == bsearchStringConstants.size())
-			bsearchStringConstants.add(bsearchString);
+		if (index == predBitsets.size())
+			predBitsets.add(bs);
 		
 		return "yylex_cclass_" + index;
+	}
+	
+	private int[] getBitsetWords(BitSet predBitset) {
+		if (predBitset.cardinality() == 0)
+			throw new IllegalStateException("dafuq?");
+		long[] a = predBitset.toLongArray();
+		if (a.length == 0)
+			throw new IllegalStateException("wut?");
+		int[] result = new int[4];
+		if (a.length > 0) {
+			result[0] = (int) (a[0] & 0xFFFFFFFFL);
+			result[1] = (int) ((a[0] >> 32) & 0xFFFFFFFFL);
+		}
+		if (a.length > 1) {
+			result[2] = (int) (a[1] & 0xFFFFFFFFL);
+			result[3] = (int) ((a[1] >> 32) & 0xFFFFFFFFL);
+		}
+		return result;
 	}
 
 	private int countNonPredicateTransitions(String labels) {
