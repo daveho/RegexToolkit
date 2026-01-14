@@ -25,6 +25,7 @@ package io.github.daveho.regextk;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -43,9 +44,8 @@ import java.util.Set;
  */
 public class GenerateLexicalAnalyzer {
 	private static final String YYLEX_STRINGIFY =
-			"static int yylex_bsearch(const char *s, int c) {\n" + 
-			"  size_t len = strlen(s);\n" + 
-			"  size_t low = 0, high = len, mid;\n" + 
+			"static int yylex_bsearch(const char *s, int len, int c) {\n" + 
+			"  int low = 0, high = len, mid;\n" + 
 			"\n" + 
 			"  while (high > low) {\n" + 
 			"    mid = (low + high) / 2;\n" + 
@@ -55,7 +55,7 @@ public class GenerateLexicalAnalyzer {
 			"    if (diff < 0)\n" + 
 			"      high = mid;\n" + 
 			"    else\n" + 
-			"      low = mid+1;\n" + 
+			"      low = mid + 1;\n" + 
 			"  }\n" + 
 			"\n" + 
 			"  return s[low] == c;\n" + 
@@ -134,9 +134,9 @@ public class GenerateLexicalAnalyzer {
 		executeDFA.setAutomaton(dfa);
 		int[][] table = executeDFA.getTable();
 		
-		// For each state, a string of characters to be checked using
-		// yylex_bsearch()
-		String[] bsearch_chars = new String[table.length];
+		// Generated string constants to serve as custom charaacter
+		// class predicates
+		List<String> bsearchStringConstants = new ArrayList<String>();
 		
 		writer.write(YYLEX_STRINGIFY);
 		writer.write("\n");
@@ -203,16 +203,50 @@ public class GenerateLexicalAnalyzer {
 			}
 			
 			for (int targetState = 0; targetState < table.length; ++targetState) {
+				// All of the characters on which we have transitions to this
+				// target state
 				String labels = transitionChars[targetState];
-				if (!labels.isEmpty()) {
+
+				// See how many transitions we have that aren't handled by
+				// a call to a predicate function
+				int nonPredicateTransitions = countNonPredicateTransitions(labels);
+				String bsearchString = "";
+				if (nonPredicateTransitions > BSEARCH_THRESHOLD) {
+					int predicateTransitions = labels.length() - nonPredicateTransitions;
+					// Predicate transitions are always at the beginning of the labels string
+					bsearchString = labels.substring(predicateTransitions);
+					
+					// Characters in the bsearch string must be sorted
+					char[] bsearchChars = bsearchString.toCharArray();
+					Arrays.sort(bsearchChars);
+					bsearchString = new String(bsearchChars);
+					
+					// Remove the characters now being handled by bsearch
+					// from the labels string
+					labels = labels.substring(0, predicateTransitions);
+				}
+
+				if (!labels.isEmpty() || !bsearchString.isEmpty()) {
 					writer.write("      ");
 					if (!firstCondition)
 						writer.write("else ");
 					else
 						firstCondition = false;
 					writer.write("if (");
+					
+					boolean emittedBsearch = false;
+					if (!bsearchString.isEmpty()) {
+						String strConstantName = findOrCreateStringConstant(bsearchStringConstants, bsearchString);
+						writer.write("yylex_bsearch(");
+						writer.write(strConstantName);
+						writer.write(", ");
+						writer.write(String.valueOf(bsearchString.length()));
+						writer.write(", c)");
+						emittedBsearch = true;
+					}
+					
 					for (int j = 0; j < labels.length(); ++j) {
-						if (j > 0)
+						if (emittedBsearch || j > 0)
 							writer.write(" ||\n               ");
 						int ch = labels.charAt(j);
 						switch (ch) {
@@ -285,9 +319,58 @@ public class GenerateLexicalAnalyzer {
 		
 		writer.flush();
 		
-		// TODO: write string constants needed for calls to yylex_bsearch()
+		// Write string constants used by yylex_bsearch
+		if (!bsearchStringConstants.isEmpty()) {
+			for (int i = 0; i < bsearchStringConstants.size(); ++i) {
+				String bsearchString = bsearchStringConstants.get(i);
+				out.write("static const char *yylex_cclass_");
+				out.write(String.valueOf(i));
+				out.write(" =\n  \"");
+				for (int j = 0; j < bsearchString.length(); ++j) {
+					int ch = bsearchString.charAt(j);
+					if (needsEscaped(ch)) {
+						out.write("\\");
+					}
+					out.write((char) ch);
+				}
+				out.write("\";\n");
+			}
+			out.write("\n");
+		}
 		
+		// Write generated code
 		out.write(generatedCodeWriter.toString());
+	}
+
+	// Check whether a character needs to be escaped in a C string literal
+	private static boolean needsEscaped(int ch) {
+		return ch == '"' || ch == '\\';
+	}
+
+	private String findOrCreateStringConstant(List<String> bsearchStringConstants, String bsearchString) {
+		int index;
+		
+		// See if this string already exists in the list
+		for (index = 0; index < bsearchStringConstants.size(); ++index) {
+			if (bsearchStringConstants.get(index).equals(bsearchString))
+				break;
+		}
+		
+		// If string hasn't been added yet, add it
+		if (index == bsearchStringConstants.size())
+			bsearchStringConstants.add(bsearchString);
+		
+		return "yylex_cclass_" + index;
+	}
+
+	private int countNonPredicateTransitions(String labels) {
+		int count = 0;
+		for (int i = 0; i < labels.length(); ++i) {
+			int c = labels.charAt(i);
+			if (c != DIGIT && c != ALPHA && c != XDIGIT && c != SPACE)
+				++count;
+		}
+		return count;
 	}
 
 	private String charLiteralEscape(int ch) {
