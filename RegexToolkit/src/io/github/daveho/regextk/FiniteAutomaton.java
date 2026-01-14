@@ -204,11 +204,9 @@ public class FiniteAutomaton implements Cloneable {
 	public FiniteAutomaton clone() {
 		FiniteAutomaton dup;
 		try {
-			dup = this.getClass().newInstance();
-		} catch (InstantiationException e) {
-			throw new IllegalStateException("can't happen");
-		} catch (IllegalAccessException e) {
-			throw new IllegalStateException("can't happen");
+			dup = (FiniteAutomaton) super.clone();
+		} catch (CloneNotSupportedException e) {
+			throw new IllegalStateException("should't happen");
 		}
 		
 		// create duplicate states
