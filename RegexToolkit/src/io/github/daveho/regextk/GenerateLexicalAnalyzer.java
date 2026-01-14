@@ -228,6 +228,7 @@ public class GenerateLexicalAnalyzer {
 
 				if (!labels.isEmpty() || !bsearchString.isEmpty()) {
 					writer.write("      ");
+					boolean wasFirstCondition = firstCondition;
 					if (!firstCondition)
 						writer.write("else ");
 					else
@@ -247,7 +248,7 @@ public class GenerateLexicalAnalyzer {
 					
 					for (int j = 0; j < labels.length(); ++j) {
 						if (emittedBsearch || j > 0)
-							writer.write(" ||\n               ");
+							writer.printf(" ||\n          %s", wasFirstCondition ? "" : "     ");
 						int ch = labels.charAt(j);
 						switch (ch) {
 						case DIGIT:
