@@ -22,7 +22,6 @@
 
 package io.github.daveho.regextk;
 
-import java.text.CharacterIterator;
 import java.util.Set;
 import java.util.TreeSet;
 
