@@ -43,7 +43,7 @@ import java.util.Set;
  * on heavyweight tools.
  */
 public class GenerateLexicalAnalyzer {
-	private static final String YYLEX_STRINGIFY =
+	private static final String YYLEX_BSEARCH =
 			"static int yylex_bsearch(const char *s, int len, int c) {\n" + 
 			"  int low = 0, high = len, mid;\n" + 
 			"\n" + 
@@ -51,14 +51,14 @@ public class GenerateLexicalAnalyzer {
 			"    mid = (low + high) / 2;\n" + 
 			"    int diff = (c - s[mid]);\n" + 
 			"    if (diff == 0)\n" + 
-			"      break;\n" + 
+			"      return 1;\n" + 
 			"    if (diff < 0)\n" + 
 			"      high = mid;\n" + 
 			"    else\n" + 
 			"      low = mid + 1;\n" + 
 			"  }\n" + 
 			"\n" + 
-			"  return s[low] == c;\n" + 
+			"  return 0;\n" + 
 			"}\n";
 	
 	private static final String PREAMBLE =
@@ -138,7 +138,7 @@ public class GenerateLexicalAnalyzer {
 		// class predicates
 		List<String> bsearchStringConstants = new ArrayList<String>();
 		
-		writer.write(YYLEX_STRINGIFY);
+		writer.write(YYLEX_BSEARCH);
 		writer.write("\n");
 		
 		writer.printf("// Lexical analyzer has %d states\n", table.length);
