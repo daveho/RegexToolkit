@@ -316,7 +316,7 @@ public class ConvertRegexpToNFA {
 			
 			return result;
 		} else {
-			// literal character or ε
+			// literal character, ε, or escape
 			FiniteAutomaton result = new FiniteAutomaton();
 			State start = result.createState();
 			start.setStart(true);
@@ -364,10 +364,12 @@ public class ConvertRegexpToNFA {
 		boolean first = true, negated = false;
 		
 		for (;;) {
-			int ch = peek();
-			if (ch < 0 || ch == ']')
+			int ch = next();
+			
+			// Character class ended?
+			if (ch == ']')
 				break;
-			ch = next();
+			
 			boolean was_first = first;
 			first = false;
 			
@@ -379,6 +381,8 @@ public class ConvertRegexpToNFA {
 			if (ch == '\\') {
 				// escape sequence
 				ch = next();
+				
+				//System.out.printf("Escape \\%c\n", ch);
 				
 				switch (ch) {
 				case 'd':
@@ -408,12 +412,14 @@ public class ConvertRegexpToNFA {
 				// character range
 				next();
 				int endCh = next();
+				//System.out.printf("Range %c-%c\n", ch, endCh);
 				for (int c = ch; c <= endCh; ++c)
 					spec.add(c);
 				continue;
 			}
 			
 			// Just a plain old regular character
+			//System.out.printf("Member: %c\n", ch);
 			spec.add(ch);
 		}
 		
