@@ -21,10 +21,18 @@ aren't, and strings that shouldn't be generated but are.
 Unlike RegeXeX, there is no GUI, but I might get around to adding one
 at some point.
 
-*Update*: As of 14-Sep-2017, there is support for reading finite
+**14-Sep-2017**: there is now support for reading finite
 automata from [JFLAP](http://www.jflap.org/) files, and the `gradefa`
 command can be used to check a student's finite automaton against
 a solution.
+
+**15-Jan-2026**: there is now support for generating a C lexical
+analyzer. This feature should be considered highly experimental,
+and you're almost certainly better off just using
+[flex](https://github.com/westes/flex), but it does seem to work.
+There are important limitations: for example, it only handles 7-bit
+ASCII.
+
 
 ## Building it
 
@@ -66,6 +74,11 @@ where `command` is one of the following commands:
   and determines whether or not they are equivalent.  Prints
   examples of incorrectly accepted or rejected strings in the case
   the student's automaton is not equivalent to the solution.
+* `lexgen`: Generate a C lexical analyzer from a lexer specification
+  consisting of pairs of lines, where the first line in the pair
+  is a token type identifier (e.g., "`IDENTIFIER`"), and the second
+  line in the pair a regular expression. This feature is experimental,
+  but thus far it does seem to work reasonably well.
 
 There is some other useful stuff if you poke around a bit.
 
