@@ -44,6 +44,8 @@ import java.util.Set;
  * on heavyweight tools.
  */
 public class GenerateLexicalAnalyzer {
+	private static final boolean DEBUG = Boolean.getBoolean("lexgen.debug");
+	
 	private static final String YYLEX_IS_MEMBER =
 			"struct yylex_charclass {\n" + 
 			"  uint32_t bits[4];\n" + 
@@ -167,21 +169,22 @@ public class GenerateLexicalAnalyzer {
 		StringWriter generatedCodeWriter = new StringWriter(); 
 		PrintWriter writer = new PrintWriter(generatedCodeWriter);
 		
-		// Analyze accepting states
-		System.out.println("NFA accepting states:");
-		for (State nfaAcceptingState : nfa.getAcceptingStates()) {
-			String tokenType = createLexerFA.getTokenTypeForAcceptingState(nfaAcceptingState);
-			System.out.printf(" NFA state %d: recognize %s\n", nfaAcceptingState.getNumber(), tokenType);
+		if (DEBUG) {
+			// Analyze accepting states
+			System.out.println("NFA accepting states:");
+			for (State nfaAcceptingState : nfa.getAcceptingStates()) {
+				String tokenType = createLexerFA.getTokenTypeForAcceptingState(nfaAcceptingState);
+				System.out.printf(" NFA state %d: recognize %s\n", nfaAcceptingState.getNumber(), tokenType);
+			}
+			System.out.println("DFA accepting states:");
+			for (State dfaAcceptingState : dfa.getAcceptingStates()) {
+				StateSet nfaStateSet = createLexerFA.getConverter().getNFAStateSetForDFAState(dfaAcceptingState);
+				System.out.printf("  DFA state %d: NFA states=%s, recognize %s\n",
+						dfaAcceptingState.getNumber(),
+						nfaStateSet,
+						determineTokenTypeForDFAAcceptingState(dfaAcceptingState));
+			}
 		}
-		System.out.println("DFA accepting states:");
-		for (State dfaAcceptingState : dfa.getAcceptingStates()) {
-			StateSet nfaStateSet = createLexerFA.getConverter().getNFAStateSetForDFAState(dfaAcceptingState);
-			System.out.printf("  DFA state %d: NFA states=%s, recognize %s\n",
-					dfaAcceptingState.getNumber(),
-					nfaStateSet,
-					determineTokenTypeForDFAAcceptingState(dfaAcceptingState));
-		}
-
 		
 		// BitSets implementing bespoke character predicates
 		List<BitSet> predBitsets = new ArrayList<BitSet>();
