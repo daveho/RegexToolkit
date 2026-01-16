@@ -89,7 +89,40 @@ public class GenerateLexicalAnalyzer {
 	// implementation
 	private static final int BITSET_THRESHOLD = 4;
 	
+	/**
+	 * The {@link CreateLexicalAnalyzerFA} object which implements the
+	 * lexical analyzer NFA and converts it to a DFA.
+	 */
 	private CreateLexicalAnalyzerFA createLexerFA;
+	
+	/** Generated lexical analyzer NFA. */
+	private FiniteAutomaton nfa;
+	
+	/** Generated lexical analyzer DFA. */
+	private FiniteAutomaton dfa;
+	
+	/**
+	 * The {@link ConvertNFAToDFA} object which implements the conversion
+	 * from NFA to DFA. It's extremely important, since it records the
+	 * mapping from NFA state sets to DFA states.
+	 */
+	private ConvertNFAToDFA converter;
+	
+	/**
+	 * List of token types, in descending order of priority.
+	 */
+	private List<String> tokenTypes;
+	
+	/**
+	 * Character code of the first column in the transition table.
+	 */
+	private int minCC;
+	
+	/**
+	 * Transition table (rows are states, columns correspond to
+	 * character codes.)
+	 */
+	private int[][] table;
 	
 	// Special character codes used as shorthands for digits,
 	// alphabetic, hex digit, and whitespace. This allows the generated
@@ -108,6 +141,16 @@ public class GenerateLexicalAnalyzer {
 	 */
 	public GenerateLexicalAnalyzer(CreateLexicalAnalyzerFA createLexerFA) {
 		this.createLexerFA = createLexerFA;
+		this.nfa = createLexerFA.getNFA();
+		this.dfa = createLexerFA.createDFA();
+		this.converter = createLexerFA.getConverter();
+		this.tokenTypes = createLexerFA.getTokenTypes();
+
+		// Create transition table
+		ExecuteDFA executeDFA = new ExecuteDFA();
+		executeDFA.setAutomaton(dfa);
+		this.minCC = executeDFA.getMinCC();
+		this.table = executeDFA.getTable();
 	}
 	
 	/**
@@ -119,19 +162,26 @@ public class GenerateLexicalAnalyzer {
 	 * @throws IOException
 	 */
 	public void generateLexicalAnalyzer(PrintWriter out) throws IOException {
-		
 		// StringWriter used to accumulate the generated code,
 		// *without* the generated string constants for bsearch checks.
 		StringWriter generatedCodeWriter = new StringWriter(); 
 		PrintWriter writer = new PrintWriter(generatedCodeWriter);
 		
-		// Get the lexical analyzer DFA
-		FiniteAutomaton dfa = createLexerFA.createDFA();
+		// Analyze accepting states
+		System.out.println("NFA accepting states:");
+		for (State nfaAcceptingState : nfa.getAcceptingStates()) {
+			String tokenType = createLexerFA.getTokenTypeForAcceptingState(nfaAcceptingState);
+			System.out.printf(" NFA state %d: recognize %s\n", nfaAcceptingState.getNumber(), tokenType);
+		}
+		System.out.println("DFA accepting states:");
+		for (State dfaAcceptingState : dfa.getAcceptingStates()) {
+			StateSet nfaStateSet = createLexerFA.getConverter().getNFAStateSetForDFAState(dfaAcceptingState);
+			System.out.printf("  DFA state %d: NFA states=%s, recognize %s\n",
+					dfaAcceptingState.getNumber(),
+					nfaStateSet,
+					determineTokenTypeForDFAAcceptingState(dfaAcceptingState));
+		}
 
-		// Create transition table 
-		ExecuteDFA executeDFA = new ExecuteDFA();
-		executeDFA.setAutomaton(dfa);
-		int[][] table = executeDFA.getTable();
 		
 		// BitSets implementing bespoke character predicates
 		List<BitSet> predBitsets = new ArrayList<BitSet>();
@@ -141,7 +191,7 @@ public class GenerateLexicalAnalyzer {
 		
 		for (int state = 0; state < table.length; ++state) {
 			int[] row = table[state];
-			Map<Integer, Integer> charToTarget = analyzeRow(row, executeDFA.getMinCC());
+			Map<Integer, Integer> charToTarget = analyzeRow(row, minCC);
 			
 			if (charToTarget.isEmpty()) {
 				// If there are no outgoing transitions, the state
@@ -272,14 +322,6 @@ public class GenerateLexicalAnalyzer {
 		writer.write("    }\n");
 		writer.write(END_LOOP_BODY);
 		
-		// Get token types
-		List<String> tokenTypes = createLexerFA.getTokenTypes();
-		
-		// Get the ConvertNFAToDFA object used to convert the lexer NFA
-		// to a DFA: we need this in order to know which NFA accepting states
-		// each DFA accepting state corresponds to
-		ConvertNFAToDFA converter = createLexerFA.getConverter();
-		
 		// Analyze accepting states of the DFA, and determine which token type
 		// is recognized for each one
 		List<State> acceptingStates = dfa.getAcceptingStates();
@@ -289,7 +331,7 @@ public class GenerateLexicalAnalyzer {
 		
 		// Determine which token type is recognized in each DFA accepting state
 		for (State dfaAcceptingState : acceptingStates) {
-			String recognizedTokenType = determineTokenTypeForDFAAcceptingState(tokenTypes, converter, dfaAcceptingState);
+			String recognizedTokenType = determineTokenTypeForDFAAcceptingState(dfaAcceptingState);
 			dfaStateToRecognizedTokenType[dfaAcceptingState.getNumber()] = recognizedTokenType;
 		}
 		
@@ -532,8 +574,7 @@ public class GenerateLexicalAnalyzer {
 		return firstCondition;
 	}
 
-	private String determineTokenTypeForDFAAcceptingState(List<String> tokenTypes, ConvertNFAToDFA converter,
-			State dfaAcceptingState) {
+	private String determineTokenTypeForDFAAcceptingState(State dfaAcceptingState) {
 		// This should only be called with a DFA accepting state
 		if (!dfaAcceptingState.isAccepting())
 			throw new IllegalArgumentException();

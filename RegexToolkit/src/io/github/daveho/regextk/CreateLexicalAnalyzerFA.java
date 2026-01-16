@@ -137,6 +137,18 @@ public class CreateLexicalAnalyzerFA {
 	}
 	
 	/**
+	 * Get the created NFA.
+	 * The NFA is created on the fly as token types are
+	 * added, so it's fine to call this once all of the token
+	 * types are registered.
+	 * 
+	 * @return the NFA created from the token regular expressions
+	 */
+	public FiniteAutomaton getNFA() {
+		return nfa;
+	}
+	
+	/**
 	 * Get token types in decreasing order of priority.
 	 * 
 	 * @return token types

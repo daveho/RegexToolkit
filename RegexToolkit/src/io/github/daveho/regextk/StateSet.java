@@ -114,4 +114,20 @@ public class StateSet implements Comparable<StateSet> {
 		StateSet other = (StateSet) obj;
 		return this.states.equals(other.states);
 	}
+	
+	@Override
+	public String toString() {
+		StringBuilder buf = new StringBuilder();
+		boolean first = true;
+		buf.append("{");
+		for (State member : states) {
+			if (first)
+				first = false;
+			else
+				buf.append(",");
+			buf.append(String.valueOf(member.getNumber()));
+		}
+		buf.append("}");
+		return buf.toString();
+	}
 }
