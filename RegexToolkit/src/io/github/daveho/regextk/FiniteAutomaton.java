@@ -205,6 +205,10 @@ public class FiniteAutomaton implements Cloneable {
 		FiniteAutomaton dup;
 		try {
 			dup = (FiniteAutomaton) super.clone();
+			// Reinitialize the object so that it is in a "newly-constructed" state
+			dup.stateList = new LinkedList<State>();
+			dup.transitionList = new LinkedList<Transition>();
+			dup.stateToTransitionListMap = new TreeMap<Integer, List<Transition>>();
 		} catch (CloneNotSupportedException e) {
 			throw new IllegalStateException("should't happen");
 		}

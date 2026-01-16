@@ -94,7 +94,7 @@ public class CreateLexicalAnalyzerFA {
 		// Build the NFA for this token type, and add it to the global NFA
 		// Convert the regex to an NFA
 
-		ConvertRegexpToNFA regexToNFA = new ConvertRegexpToNFA(regex);
+		ConvertRegexpToNFA regexToNFA = new ConvertRegexpToNFA(regex, ConvertRegexpToNFA.SyntaxMode.NORMAL);
 		FiniteAutomaton tokenNFA = regexToNFA.convertToNFA();
 		
 		// Make sure that the token NFA has a unique accepting state

@@ -29,6 +29,14 @@ import java.util.TreeSet;
  * Parse a regular expression and convert it to a nondeterministic finite automaton (NFA).
  */
 public class ConvertRegexpToNFA {
+	public enum SyntaxMode {
+		/** Occurrences of 'e' are considered to be {@link FiniteAutomaton#EPSILON}. */
+		E_AS_EPSILON,
+		
+		/** "Normal" regular expression syntax. ('e' is considered to be a literal symbol. */
+		NORMAL,
+	}
+	
 	/*
 	Grammar for simple regexps:
 
@@ -77,6 +85,7 @@ public class ConvertRegexpToNFA {
 	private String regexp;
 	private int pos;
 	private int nextCh;
+	private SyntaxMode syntaxMode;
 
 	/**
 	 * Digit characters.
@@ -124,13 +133,28 @@ public class ConvertRegexpToNFA {
 	
 	/**
 	 * Constructor.
+	 * Note that if this constructor is used, occurrences of 'e'
+	 * in the regexp are considered to be {@link FiniteAutomaton#EPSILON}.
+	 * Use the two-argument constructor if you need 'e' to be treated
+	 * as a literal symbol.
 	 * 
 	 * @param regexp a string containing a regular expression
 	 */
 	public ConvertRegexpToNFA(String regexp) {
+		this(regexp, SyntaxMode.E_AS_EPSILON);
+	}
+	
+	/**
+	 * Constructor.
+	 * 
+	 * @param regexp a string containing a regular expression
+	 * @param syntaxMode the syntax mode to use for parsing the regexp
+	 */
+	public ConvertRegexpToNFA(String regexp, SyntaxMode syntaxMode) {
 		this.regexp = regexp;
 		this.pos = 0;
 		this.nextCh = -1;
+		this.syntaxMode = syntaxMode;
 	}
 
 	/**
@@ -458,7 +482,10 @@ public class ConvertRegexpToNFA {
 	}
 
 	private int convert(int c) {
-		return c == 'e' ? FiniteAutomaton.EPSILON : c;
+		if (c == 'e' && syntaxMode == SyntaxMode.E_AS_EPSILON)
+			return FiniteAutomaton.EPSILON;
+		else
+			return c;
 	}
 
 	private int next() {
