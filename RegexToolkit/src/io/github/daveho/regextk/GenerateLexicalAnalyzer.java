@@ -92,10 +92,10 @@ public class GenerateLexicalAnalyzer {
 	private static final int BITSET_THRESHOLD = 4;
 	
 	/**
-	 * The {@link CreateLexicalAnalyzerFA} object which implements the
+	 * The {@link CreateLexicalAnalyzerNFA} object which implements the
 	 * lexical analyzer NFA and converts it to a DFA.
 	 */
-	private CreateLexicalAnalyzerFA createLexerFA;
+	private CreateLexicalAnalyzerNFA createLexerNFA;
 	
 	/** Generated lexical analyzer NFA. */
 	private FiniteAutomaton nfa;
@@ -138,15 +138,18 @@ public class GenerateLexicalAnalyzer {
 	/**
 	 * Constructor.
 	 * 
-	 * @param createLexerFA the {@link CreateLexicalAnalyzerFA} object
+	 * @param createLexerFA the {@link CreateLexicalAnalyzerNFA} object
 	 *                      which creates the lexer DFA
 	 */
-	public GenerateLexicalAnalyzer(CreateLexicalAnalyzerFA createLexerFA) {
-		this.createLexerFA = createLexerFA;
+	public GenerateLexicalAnalyzer(CreateLexicalAnalyzerNFA createLexerFA) {
+		this.createLexerNFA = createLexerFA;
 		this.nfa = createLexerFA.getNFA();
-		this.dfa = createLexerFA.createDFA();
-		this.converter = createLexerFA.getConverter();
 		this.tokenTypes = createLexerFA.getTokenTypes();
+		
+		// Create DFA from NFA
+		this.converter = new ConvertNFAToDFA();
+		converter.add(this.nfa);
+		this.dfa = converter.execute(FiniteAutomatonTransformerMode.NONDESTRUCTIVE);
 
 		// Create transition table
 		ExecuteDFA executeDFA = new ExecuteDFA();
@@ -173,12 +176,12 @@ public class GenerateLexicalAnalyzer {
 			// Analyze accepting states
 			System.out.println("NFA accepting states:");
 			for (State nfaAcceptingState : nfa.getAcceptingStates()) {
-				String tokenType = createLexerFA.getTokenTypeForAcceptingState(nfaAcceptingState);
+				String tokenType = createLexerNFA.getTokenTypeForAcceptingState(nfaAcceptingState);
 				System.out.printf(" NFA state %d: recognize %s\n", nfaAcceptingState.getNumber(), tokenType);
 			}
 			System.out.println("DFA accepting states:");
 			for (State dfaAcceptingState : dfa.getAcceptingStates()) {
-				StateSet nfaStateSet = createLexerFA.getConverter().getNFAStateSetForDFAState(dfaAcceptingState);
+				StateSet nfaStateSet = converter.getNFAStateSetForDFAState(dfaAcceptingState);
 				System.out.printf("  DFA state %d: NFA states=%s, recognize %s\n",
 						dfaAcceptingState.getNumber(),
 						nfaStateSet,
@@ -590,7 +593,7 @@ public class GenerateLexicalAnalyzer {
 		Set<String> recognizedTokenTypes = new HashSet<String>();
 		for (State nfaState : nfaAcceptingStateSet.getStates()) {
 			if (nfaState.isAccepting())
-				recognizedTokenTypes.add(createLexerFA.getTokenTypeForAcceptingState(nfaState));
+				recognizedTokenTypes.add(createLexerNFA.getTokenTypeForAcceptingState(nfaState));
 		}
 		
 		// At least one of the NFA states should be an accepting state,

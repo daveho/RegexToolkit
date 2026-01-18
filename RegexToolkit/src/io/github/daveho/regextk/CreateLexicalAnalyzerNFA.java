@@ -28,7 +28,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class CreateLexicalAnalyzerFA {
+/**
+ * Create an NFA to implement a lexical analyzer from
+ * regular expressions of token types. Each NFA accepting state
+ * recognizes one specific token type.
+ */
+public class CreateLexicalAnalyzerNFA {
 	/**
 	 * Token type identifiers, in the order in which they were added.
 	 * When a lexeme matches two token types, the one that is earlier in
@@ -56,21 +61,21 @@ public class CreateLexicalAnalyzerFA {
 	 */
 	private State globalStartState;
 	
-	/**
-	 * Converter to convert the NFA to a DFA.
-	 * We need to keep this around since it has the mappings
-	 * of NFA state sets to DFA states, which we need in order
-	 * to determine which token type is recognized by each DFA
-	 * accepting state.
-	 */
-	private ConvertNFAToDFA converter;
+//	/**
+//	 * Converter to convert the NFA to a DFA.
+//	 * We need to keep this around since it has the mappings
+//	 * of NFA state sets to DFA states, which we need in order
+//	 * to determine which token type is recognized by each DFA
+//	 * accepting state.
+//	 */
+//	private ConvertNFAToDFA converter;
+//	
+//	/**
+//	 * Generated DFA.
+//	 */
+//	private FiniteAutomaton dfa;
 	
-	/**
-	 * Generated DFA.
-	 */
-	private FiniteAutomaton dfa;
-	
-	public CreateLexicalAnalyzerFA() {
+	public CreateLexicalAnalyzerNFA() {
 		tokenTypes = new ArrayList<String>();
 		tokenTypeToAcceptingState = new HashMap<String, State>();
 		acceptingStateToTokenType = new HashMap<State, String>();
@@ -124,19 +129,6 @@ public class CreateLexicalAnalyzerFA {
 	}
 	
 	/**
-	 * Create DFA for recognizing tokens.
-	 * @return the DFA recognizing the tokens of the input language
-	 */
-	public FiniteAutomaton createDFA() {
-		if (dfa == null) {
-			converter = new ConvertNFAToDFA();
-			converter.add(nfa);
-			dfa = converter.execute(FiniteAutomatonTransformerMode.NONDESTRUCTIVE);
-		}
-		return dfa;
-	}
-	
-	/**
 	 * Get the created NFA.
 	 * The NFA is created on the fly as token types are
 	 * added, so it's fine to call this once all of the token
@@ -155,19 +147,6 @@ public class CreateLexicalAnalyzerFA {
 	 */
 	public List<String> getTokenTypes() {
 		return Collections.unmodifiableList(tokenTypes);
-	}
-	
-	/**
-	 * Get the {@link ConvertNFAToDFA} object used to convert the lexical
-	 * analyzer NFA to a DFA. This is important, since the NFA accepting states
-	 * are associated 1:1 with the token types, and by knowing which NFA
-	 * accepting states a DFA accepting state is associated with, we know
-	 * what kind of token is recognized by that DFA state.
-	 *  
-	 * @return the {@link ConvertNFAToDFA} object
-	 */
-	public ConvertNFAToDFA getConverter() {
-		return converter;
 	}
 	
 	/**

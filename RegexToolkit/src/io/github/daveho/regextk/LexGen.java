@@ -26,7 +26,7 @@ public class LexGen {
 		String specfile = args[0];
 		String outputSourceFile = args[1];
 
-		CreateLexicalAnalyzerFA createLexerFA = new CreateLexicalAnalyzerFA();
+		CreateLexicalAnalyzerNFA createLexerFA = new CreateLexicalAnalyzerNFA();
 
 		// Each entry in the specfile is two lines.
 		// - The first line (in an entry) is the token type identifier
