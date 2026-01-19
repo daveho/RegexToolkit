@@ -355,9 +355,12 @@ public class GenerateLexicalAnalyzer {
 		else if (ts.hasExactly(ConvertRegexpToNFA.HEX_DIGITS))
 			out.write("isxdigit(c)");
 		else if (ts.size() >= BITSET_THRESHOLD) {
+			// Emit a bitset to serve as a bespoke character predicate
 			String cclassName = findOrCreateBitSet(ts.membersAsString());
 			out.write("yylex_is_member(&" + cclassName + ", c)");
 		} else {
+			// Just emit a condition to check the scanned character
+			// against specific values
 			boolean first = true;
 			for (Character ch : ts.getCharSet()) {
 				if (first)
@@ -389,13 +392,13 @@ public class GenerateLexicalAnalyzer {
 		
 		int index;
 		
-		// See if this string already exists in the list
+		// See if this bitset already exists in the list
 		for (index = 0; index < predBitsets.size(); ++index) {
 			if (predBitsets.get(index).equals(bs))
 				break;
 		}
 		
-		// If string hasn't been added yet, add it
+		// If the bitset hasn't been added yet, add it
 		if (index == predBitsets.size())
 			predBitsets.add(bs);
 		
