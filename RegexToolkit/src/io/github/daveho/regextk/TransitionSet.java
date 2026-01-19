@@ -34,6 +34,9 @@ public class TransitionSet implements Comparable<TransitionSet> {
 	 * @param ch a character
 	 */
 	public void addChar(char ch) {
+		int c = (int)ch;
+		if (c < 0 || c > 127)
+			throw new IllegalArgumentException("Transition on non-ASCII character " + c);
 		charSet.add(ch);
 	}
 	
@@ -102,8 +105,12 @@ public class TransitionSet implements Comparable<TransitionSet> {
 	 */
 	public String membersAsString() {
 		StringBuilder buf = new StringBuilder();
-		for (Character c : charSet)
-			buf.append(c.charValue());
+		for (Character c : charSet) {
+			int ch = c.charValue();
+			if (ch < 0 || ch > 127)
+				throw new IllegalStateException("non-ASCII character " + ch);
+			buf.append((char)ch);
+		}
 		return buf.toString();
 	}
 }
