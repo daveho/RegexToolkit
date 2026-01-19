@@ -61,8 +61,10 @@ public class GenerateLexicalAnalyzer {
 			"  return (cc->bits[word_index] & (1U << bit_offset)) != 0U;\n" + 
 			"}\n";
 	
+	// Values to substitute:
+	//   - state number data type (two times)
 	private static final String YYLEX_LOOKUP_NEXT_STATE =
-			"int yylex_lookup_next_state(const int *table, int min_cc, int size, int c) {\n" + 
+			"%s yylex_lookup_next_state(const %s *table, int min_cc, int size, int c) {\n" + 
 			"  int index;\n" + 
 			"  index = c - min_cc;\n" + 
 			"  if (index < 0 || index >= size)\n" + 
@@ -71,19 +73,25 @@ public class GenerateLexicalAnalyzer {
 			"    return table[index];\n" + 
 			"}\n";
 
+	// Values to substitute:
+	//   - state number data type
+	//   - state number of start state
 	private static final String PREAMBLE =
-			"static int yylex(LEXER_TYPE lexer, LEXEME_BUF_TYPE lexeme_buf) {\n" + 
-			"  int state = %d, next_state, token_type, c;\n" + 
+			"static int yylex(LEXER_TYPE lexer, LEXEME_BUF_TYPE lexeme_buf) {\n" +
+			"  %s state = %d, next_state;\n" +
+			"  int token_type, c;\n" + 
 			"  for (;;) {\n" + 
 			"    c = GET(lexer);\n" + 
 			"    if (c == EOF)\n" + 
 			"      break;\n" + 
 			"    next_state = -1;\n" + 
 			"    switch (state) {\n";
-	
+
+	// Values to substitute:
+	//   - signed variant of state number data type
 	private static final String END_LOOP_BODY =
 			"    } // end switch\n" +
-			"    if (next_state == -1) {\n" +
+			"    if (((%s) next_state) == -1) {\n" +
 			"      UNGET(lexer, c);\n" +
 			"      break;\n" +
 			"    }\n" +
@@ -154,6 +162,13 @@ public class GenerateLexicalAnalyzer {
 	private List<SingleCharTransitionLookupTable> singleCharTransitionLookupTables;
 	
 	/**
+	 * Integer type to use to represent state values.
+	 * This is the unsigned version, where the maximum value
+	 * is used to represent an invalid state.
+	 */
+	private String stateNumberType;
+	
+	/**
 	 * Constructor.
 	 * 
 	 * @param createLexerFA the {@link CreateLexicalAnalyzerNFA} object
@@ -177,6 +192,17 @@ public class GenerateLexicalAnalyzer {
 		
 		this.predBitsets = new ArrayList<BitSet>();
 		this.singleCharTransitionLookupTables = new ArrayList<SingleCharTransitionLookupTable>();
+		
+		// Determine integer type to use to represent state numbers
+		// in the generated code. We try to use the smallest unsigned
+		// integer type that will work.
+		int numStates = table.length;
+		if (numStates < 255)
+			this.stateNumberType = "uint8_t";
+		else if (numStates < 65535)
+			this.stateNumberType = "uint16_t";
+		else
+			this.stateNumberType = "uint32_t";
 	}
 	
 	/**
@@ -195,7 +221,7 @@ public class GenerateLexicalAnalyzer {
 		PrintWriter codeGenOutPw = new PrintWriter(codeGenOut);
 		
 		// Write the preamble of the yylex() function
-		codeGenOutPw.printf(PREAMBLE, dfa.getStartState().getNumber());
+		codeGenOutPw.printf(PREAMBLE, stateNumberType, dfa.getStartState().getNumber());
 
 		// Write the switch cases of the main finite automaton loop
 		for (int stateNumber = 0; stateNumber < table.length; ++stateNumber) {
@@ -258,8 +284,11 @@ public class GenerateLexicalAnalyzer {
 			codeGenOutPw.write("      break;\n");
 		}
 		
-		// Write the end of the state machine loop
-		codeGenOutPw.write(END_LOOP_BODY);
+		// Write the end of the state machine loop.
+		// Note that we get the signed version of the state number data
+		// type by stripping off the leading 'u' character from the
+		// type. E.g., "uint8_t" becomes "int8_t".
+		codeGenOutPw.printf(END_LOOP_BODY, stateNumberType.substring(1));
 		
 		// Write the switch statement to compute the recognized token type
 		writeTokenClassifierSwitchStatement(codeGenOutPw);
@@ -280,7 +309,7 @@ public class GenerateLexicalAnalyzer {
 		// If necessary, write definitions of yylex_lookup_next_state function
 		// and the supporting single-character transition lookup tables
 		if (!singleCharTransitionLookupTables.isEmpty()) {
-			out.write(YYLEX_LOOKUP_NEXT_STATE);
+			out.printf(YYLEX_LOOKUP_NEXT_STATE, stateNumberType, stateNumberType);
 			out.write("\n");
 			
 			for (SingleCharTransitionLookupTable lookupTable : singleCharTransitionLookupTables)
@@ -541,7 +570,7 @@ public class GenerateLexicalAnalyzer {
 	}
 
 	private void generateSingleCharTransitionLookupTable(PrintWriter out, SingleCharTransitionLookupTable lookupTable) {
-		out.write("static const int ");
+		out.printf("static const %s ", stateNumberType);
 		out.write(lookupTable.getName());
 		out.write("[] = { ");
 		int[] lookup = lookupTable.getLookup();
