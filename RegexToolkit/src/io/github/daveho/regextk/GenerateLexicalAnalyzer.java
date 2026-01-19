@@ -100,7 +100,7 @@ public class GenerateLexicalAnalyzer {
 			"  }\n";
 	
 	private static final String END_FUNCTION =
-			"  return token_type;\n" + 
+			"  return yylex_final_state_to_token_type[state];\n" + 
 			"}\n";
 	
 	// Threshold for allowed number of single-character transitions to the
@@ -220,6 +220,11 @@ public class GenerateLexicalAnalyzer {
 		StringWriter codeGenOut = new StringWriter();
 		PrintWriter codeGenOutPw = new PrintWriter(codeGenOut);
 		
+		// Write the table classifying the recognized token based on the final state.
+		codeGenOutPw.write("static const int yylex_final_state_to_token_type[] = {\n");
+		writeFinalStateToTokenTypeTableContents(codeGenOutPw);
+		codeGenOutPw.write("};\n\n");
+		
 		// Write the preamble of the yylex() function
 		codeGenOutPw.printf(PREAMBLE, stateNumberType, dfa.getStartState().getNumber());
 
@@ -290,8 +295,13 @@ public class GenerateLexicalAnalyzer {
 		// type. E.g., "uint8_t" becomes "int8_t".
 		codeGenOutPw.printf(END_LOOP_BODY, stateNumberType.substring(1));
 		
-		// Write the switch statement to compute the recognized token type
-		writeTokenClassifierSwitchStatement(codeGenOutPw);
+		// Write the end of the function, which will return the recognized token
+		// type based on the final state.
+		codeGenOutPw.write(END_FUNCTION);
+		
+		// End of main generated code (written to codeGenOut via CodeGenOutPw.)
+		// Now we can output the full generated code, including helper functions
+		// and data structures.
 		
 		// If necessary, write out the definitions of the
 		// yylex_charclass struct type and yylex_is_member() function,
@@ -321,7 +331,6 @@ public class GenerateLexicalAnalyzer {
 		// Write the generated yylex function
 		String generatedCode = codeGenOut.toString();
 		out.write(generatedCode);
-		out.write(END_FUNCTION);
 	}
 
 	/**
@@ -471,7 +480,36 @@ public class GenerateLexicalAnalyzer {
 		}
 	}
 	
-	private void writeTokenClassifierSwitchStatement(PrintWriter writer) {
+//	private void writeTokenClassifierSwitchStatement(PrintWriter writer) {
+//		// Analyze accepting states of the DFA, and determine which token type
+//		// is recognized for each one
+//		List<State> acceptingStates = dfa.getAcceptingStates();
+//		
+//		// For DFA accepting states, what token type is recognized
+//		String[] dfaStateToRecognizedTokenType = new String[table.length];
+//		
+//		// Determine which token type is recognized in each DFA accepting state
+//		for (State dfaAcceptingState : acceptingStates) {
+//			String recognizedTokenType = determineTokenTypeForDFAAcceptingState(dfaAcceptingState);
+//			dfaStateToRecognizedTokenType[dfaAcceptingState.getNumber()] = recognizedTokenType;
+//		}
+//		
+//		writer.write("  token_type = -1;\n");
+//		writer.write("  switch (state) {\n");
+//		
+//		for (int state = 0; state < table.length; ++state) {
+//			String recognizedTokenType = dfaStateToRecognizedTokenType[state];
+//			if (recognizedTokenType != null) {
+//				writer.printf("  case %d:\n", state);
+//				writer.printf("    token_type = %s;\n", recognizedTokenType); 
+//				writer.write("    break;\n");
+//			}
+//		}
+//		
+//		writer.write("  }\n");
+//	}
+	
+	private void writeFinalStateToTokenTypeTableContents(PrintWriter writer) {
 		// Analyze accepting states of the DFA, and determine which token type
 		// is recognized for each one
 		List<State> acceptingStates = dfa.getAcceptingStates();
@@ -485,19 +523,13 @@ public class GenerateLexicalAnalyzer {
 			dfaStateToRecognizedTokenType[dfaAcceptingState.getNumber()] = recognizedTokenType;
 		}
 		
-		writer.write("  token_type = -1;\n");
-		writer.write("  switch (state) {\n");
-		
 		for (int state = 0; state < table.length; ++state) {
 			String recognizedTokenType = dfaStateToRecognizedTokenType[state];
-			if (recognizedTokenType != null) {
-				writer.printf("  case %d:\n", state);
-				writer.printf("    token_type = %s;\n", recognizedTokenType); 
-				writer.write("    break;\n");
-			}
+			if (recognizedTokenType == null)
+				writer.write("  -1,\n"); // not an accepting state
+			else
+				writer.printf("  %s,\n", recognizedTokenType);
 		}
-		
-		writer.write("  }\n");
 	}
 
 	private String determineTokenTypeForDFAAcceptingState(State dfaAcceptingState) {
