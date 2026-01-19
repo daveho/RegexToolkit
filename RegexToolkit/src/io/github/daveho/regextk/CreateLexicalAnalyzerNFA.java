@@ -60,21 +60,10 @@ public class CreateLexicalAnalyzerNFA {
 	 * Start state of global NFA.
 	 */
 	private State globalStartState;
-	
-//	/**
-//	 * Converter to convert the NFA to a DFA.
-//	 * We need to keep this around since it has the mappings
-//	 * of NFA state sets to DFA states, which we need in order
-//	 * to determine which token type is recognized by each DFA
-//	 * accepting state.
-//	 */
-//	private ConvertNFAToDFA converter;
-//	
-//	/**
-//	 * Generated DFA.
-//	 */
-//	private FiniteAutomaton dfa;
-	
+
+	/**
+	 * Constructor.
+	 */
 	public CreateLexicalAnalyzerNFA() {
 		tokenTypes = new ArrayList<String>();
 		tokenTypeToAcceptingState = new HashMap<String, State>();
