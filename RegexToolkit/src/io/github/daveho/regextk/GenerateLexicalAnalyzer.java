@@ -60,6 +60,16 @@ public class GenerateLexicalAnalyzer {
 			"    return 0;\n" + 
 			"  return (cc->bits[word_index] & (1U << bit_offset)) != 0U;\n" + 
 			"}\n";
+	
+	private static final String YYLEX_LOOKUP_NEXT_STATE =
+			"int yylex_lookup_next_state(const int *table, int min_cc, int size, int c) {\n" + 
+			"  int index;\n" + 
+			"  index = c - min_cc;\n" + 
+			"  if (index < 0 || index >= size)\n" + 
+			"    return -1;\n" + 
+			"  else\n" + 
+			"    return table[index];\n" + 
+			"}\n";
 
 	private static final String PREAMBLE =
 			"static int yylex(LEXER_TYPE lexer, LEXEME_BUF_TYPE lexeme_buf) {\n" + 
@@ -93,7 +103,7 @@ public class GenerateLexicalAnalyzer {
 	
 	// Threshold for emitting a lookup table for single-character
 	// transitions
-	private static final int SINGLE_CHAR_TRANSITION_THRESHOLD = Integer.MAX_VALUE;
+	private static final int SINGLE_CHAR_TRANSITION_THRESHOLD = 4;
 	
 	/**
 	 * The {@link CreateLexicalAnalyzerNFA} object which implements the
@@ -139,6 +149,11 @@ public class GenerateLexicalAnalyzer {
 	private List<BitSet> predBitsets;
 	
 	/**
+	 * Generated single-character-transition lookup tables
+	 */
+	private List<SingleCharTransitionLookupTable> singleCharTransitionLookupTables;
+	
+	/**
 	 * Constructor.
 	 * 
 	 * @param createLexerFA the {@link CreateLexicalAnalyzerNFA} object
@@ -161,6 +176,7 @@ public class GenerateLexicalAnalyzer {
 		this.table = executeDFA.getTable();
 		
 		this.predBitsets = new ArrayList<BitSet>();
+		this.singleCharTransitionLookupTables = new ArrayList<SingleCharTransitionLookupTable>();
 	}
 	
 	/**
@@ -172,7 +188,6 @@ public class GenerateLexicalAnalyzer {
 	 * @throws IOException
 	 */
 	public void generateLexicalAnalyzer(PrintWriter out) throws IOException {
-		
 		// Generate main lexical analyzer code and accumulate data structures
 		// we'll need to emit
 		
@@ -212,9 +227,16 @@ public class GenerateLexicalAnalyzer {
 
 			// Handle all transitions on a single character
 			if (!singleCharTransitions.isEmpty()) {
-				if (singleCharTransitions.size() >= SINGLE_CHAR_TRANSITION_THRESHOLD)
-					throw new IllegalStateException("not yet");
-				else {
+				if (singleCharTransitions.size() >= SINGLE_CHAR_TRANSITION_THRESHOLD) {
+					SingleCharTransitionLookupTable lookupTable =
+							findOrCreateSingleCharTransitionLookupTable(singleCharTransitions);
+					// This MUST be the end of the switch case!
+					codeGenOutPw.write("      ");
+					if (!firstCondition)
+						codeGenOutPw.write("else\n        ");
+					codeGenOutPw.printf("next_state = yylex_lookup_next_state(%s, %d, %d, c);\n",
+							lookupTable.getName(), lookupTable.getMinCC(), lookupTable.size());
+				} else {
 					// Check single-character transitions one at a time
 					for (TransitionSet singleCharTs : singleCharTransitions) {
 						if (singleCharTs.size() != 1)
@@ -251,6 +273,18 @@ public class GenerateLexicalAnalyzer {
 			
 			for (int i = 0; i < predBitsets.size(); ++i)
 				generatePredBitset(out, i, predBitsets.get(i));
+			
+			out.write("\n");
+		}
+		
+		// If necessary, write definitions of yylex_lookup_next_state function
+		// and the supporting single-character transition lookup tables
+		if (!singleCharTransitionLookupTables.isEmpty()) {
+			out.write(YYLEX_LOOKUP_NEXT_STATE);
+			out.write("\n");
+			
+			for (SingleCharTransitionLookupTable lookupTable : singleCharTransitionLookupTables)
+				generateSingleCharTransitionLookupTable(out, lookupTable);
 			
 			out.write("\n");
 		}
@@ -481,5 +515,38 @@ public class GenerateLexicalAnalyzer {
 			out.printf("0x%x, ", bitsetWords[j]);
 		out.write("}\n");
 		out.write("};\n");
+	}
+
+	private SingleCharTransitionLookupTable findOrCreateSingleCharTransitionLookupTable(List<TransitionSet> singleCharTransitions) {
+		SingleCharTransitionLookupTable singleCharTransitionLookupTable =
+				new SingleCharTransitionLookupTable(singleCharTransitions);
+		int index;
+		
+		// Check already-existing lookup tables:
+		// if we find an identical one, return it
+		for (index = 0; index < singleCharTransitionLookupTables.size(); ++index) {
+			SingleCharTransitionLookupTable existingTable = singleCharTransitionLookupTables.get(index);
+			if (existingTable.equals(singleCharTransitionLookupTable))
+				return existingTable;
+		}
+		
+		// No identical lookup table exists yet, so add it to the
+		// list of know lookup tables
+		singleCharTransitionLookupTables.add(singleCharTransitionLookupTable);
+		singleCharTransitionLookupTable.setName("yylex_lookup_" + index);
+		return singleCharTransitionLookupTable;
+	}
+
+	private void generateSingleCharTransitionLookupTable(PrintWriter out, SingleCharTransitionLookupTable lookupTable) {
+		out.write("static const int ");
+		out.write(lookupTable.getName());
+		out.write("[] = { ");
+		int[] lookup = lookupTable.getLookup();
+		for (int i = 0; i < lookup.length; ++i) {
+			if (i != 0)
+				out.write(", ");
+			out.write(String.valueOf(lookup[i]));
+		}
+		out.write(" };\n");
 	}
 }
