@@ -79,7 +79,7 @@ public class GenerateLexicalAnalyzer {
 	private static final String PREAMBLE =
 			"static int yylex(LEXER_TYPE lexer, LEXEME_BUF_TYPE lexeme_buf) {\n" +
 			"  %s state = %d, next_state;\n" +
-			"  int token_type, c;\n" + 
+			"  int c;\n" + 
 			"  for (;;) {\n" + 
 			"    c = GET(lexer);\n" + 
 			"    if (c == EOF)\n" + 
@@ -604,13 +604,17 @@ public class GenerateLexicalAnalyzer {
 	private void generateSingleCharTransitionLookupTable(PrintWriter out, SingleCharTransitionLookupTable lookupTable) {
 		out.printf("static const %s ", stateNumberType);
 		out.write(lookupTable.getName());
-		out.write("[] = { ");
+		out.write("[] = {\n ");
 		int[] lookup = lookupTable.getLookup();
+		int col = 0;
 		for (int i = 0; i < lookup.length; ++i) {
-			if (i != 0)
-				out.write(", ");
+			if ((col % 15) == 14)
+				out.write("\n ");
+			out.write(" ");
 			out.write(String.valueOf(lookup[i]));
+			out.write(",");
+			++col;
 		}
-		out.write(" };\n");
+		out.write("\n};\n");
 	}
 }
