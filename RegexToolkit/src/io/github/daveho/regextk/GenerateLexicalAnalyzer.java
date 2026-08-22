@@ -169,6 +169,14 @@ public class GenerateLexicalAnalyzer {
 	private String stateNumberType;
 	
 	/**
+	 * Numeric value of the "invalid" state, i.e., the value
+	 * that should be encoded in a transition table to indicate
+	 * that there is no transition. We can't just just "-1" because
+	 * we use an unsigned integer type for state numbers.
+	 */
+	private String invalidStateNumber;
+	
+	/**
 	 * Constructor.
 	 * 
 	 * @param createLexerFA the {@link CreateLexicalAnalyzerNFA} object
@@ -197,12 +205,16 @@ public class GenerateLexicalAnalyzer {
 		// in the generated code. We try to use the smallest unsigned
 		// integer type that will work.
 		int numStates = table.length;
-		if (numStates < 255)
+		if (numStates < 255) {
 			this.stateNumberType = "uint8_t";
-		else if (numStates < 65535)
+			this.invalidStateNumber = "255";
+		} else if (numStates < 65535) {
 			this.stateNumberType = "uint16_t";
-		else
+			this.invalidStateNumber = "65535";
+		} else {
 			this.stateNumberType = "uint32_t";
+			this.invalidStateNumber = "4294967295";
+		}
 	}
 	
 	/**
@@ -611,7 +623,11 @@ public class GenerateLexicalAnalyzer {
 			if ((col % 15) == 14)
 				out.write("\n ");
 			out.write(" ");
-			out.write(String.valueOf(lookup[i]));
+			int destStateNumber = lookup[i];
+			if (destStateNumber < 0)
+				out.write(invalidStateNumber);
+			else
+				out.write(String.valueOf(destStateNumber));
 			out.write(",");
 			++col;
 		}
