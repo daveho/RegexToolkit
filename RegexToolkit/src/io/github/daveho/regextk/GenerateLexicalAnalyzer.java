@@ -540,7 +540,7 @@ public class GenerateLexicalAnalyzer {
 			if (recognizedTokenType == null)
 				writer.write("  -1,\n"); // not an accepting state
 			else
-				writer.printf("  %s,\n", recognizedTokenType);
+				writer.printf("  (int) %s,\n", recognizedTokenType);
 		}
 	}
 
